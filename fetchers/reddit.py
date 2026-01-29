@@ -42,7 +42,7 @@ class RedditFetcher(BaseFetcher):
                 f"https://www.reddit.com/r/{subreddit}/hot.json",
                 params={"limit": limit},
                 headers={
-                    "User-Agent": "DailyHotTracker/1.0 (by /u/daily_bot)"
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
                 },
                 timeout=15
             )
