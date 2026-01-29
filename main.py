@@ -5,6 +5,10 @@
 import argparse
 import sys
 from typing import List
+from dotenv import load_dotenv
+
+# 加载环境变量 (必须在导入 config 之前)
+load_dotenv()
 
 import config
 from fetchers import (

@@ -103,84 +103,56 @@ class FeishuBot:
     
     def send_daily_digest(self, items: List[ContentItem]) -> bool:
         """
-        发送每日精选摘要（按分类展示）
-        
-        Args:
-            items: 筛选后的内容列表
+        发送每日精选简报 (Newsletter 风格)
         """
-        # 定义分类映射
-        category_map = {
-            "GitHub": {"emoji": "⚫", "name": "开源项目", "items": []},
-            "Hacker": {"emoji": "🟠", "name": "技术讨论", "items": []},
-            "Reddit": {"emoji": "🔴", "name": "社区热议", "items": []},
-            "Product": {"emoji": "🟣", "name": "新产品", "items": []},
-            "TechCrunch": {"emoji": "🟢", "name": "科技新闻", "items": []},
-            "Other": {"emoji": "🔵", "name": "其他资讯", "items": []},
-        }
-        
-        # 按来源分类
-        for item in items:
-            source_lower = item.source.lower()
-            categorized = False
-            for key in category_map:
-                if key.lower() in source_lower:
-                    category_map[key]["items"].append(item)
-                    categorized = True
-                    break
-            if not categorized:
-                category_map["Other"]["items"].append(item)
-        
-        # 构建卡片
+        if not items:
+            return False
+            
         elements = []
         
-        today = datetime.now().strftime("%Y年%m月%d日")
+        # 顶部日期
+        today = datetime.now().strftime("%Y-%m-%d")
         elements.append({
             "tag": "markdown",
-            "content": f"📅 **{today}** | AI 精选 {len(items)} 条优质内容"
+            "content": f"📅 **{today}** | 精选 {len(items)} 条高价值内容"
         })
         
         elements.append({"tag": "hr"})
         
-        # 按分类展示
-        for cat_key, cat_info in category_map.items():
-            if not cat_info["items"]:
-                continue
-                
-            # 分类标题
+        # 逐条展示
+        for item in items:
+            # 优先使用 AI 生成的中文标题
+            title_text = item.ai_title if item.ai_title else item.title
+            
+            # 正文内容
+            summary_text = item.ai_summary if item.ai_summary else item.description[:100]
+            
+            # 构建 Markdown 内容
+            # 格式:
+            # **标题**
+            # 正文内容... [来源](url)
+            
+            content_md = f"**{title_text}**\n\n{summary_text} [来源]({item.url})"
+            
             elements.append({
                 "tag": "markdown",
-                "content": f"{cat_info['emoji']} **{cat_info['name']}**"
+                "content": content_md
             })
             
-            # 该分类下的内容
-            for item in cat_info["items"]:
-                score_emoji = self._get_score_emoji(item.ai_score)
-                
-                # 标题（限制长度）
-                title_display = item.title[:40] + "..." if len(item.title) > 40 else item.title
-                
-                # 构建内容：先是标题和评分
-                line = f"{score_emoji} **[{title_display}]({item.url})** `{item.ai_score:.1f}分`\n"
-                
-                # 添加简介（这是什么）
-                if item.ai_summary:
-                    line += f"   📌 {item.ai_summary}\n"
-                
-                # 添加亮点（为什么值得关注）
-                if item.ai_reason:
-                    line += f"   💡 {item.ai_reason}\n"
-                
-                elements.append({
-                    "tag": "markdown",
-                    "content": line
-                })
-            
+            # 增加一点间距，使用透明图片或空行 (飞书 markdown 支持有限，用 hr 做分割比较稳)
             elements.append({"tag": "hr"})
-        
+            
+        # 移除最后一个分割线（美观）
+        if elements and elements[-1]["tag"] == "hr":
+            elements.pop()
+            
         # 底部说明
         elements.append({
-            "tag": "markdown",
-            "content": "💡 *评分基于 AI 自动分析 | 关注领域：AI/LLM、跨境电商*"
+            "tag": "note",
+            "elements": [{
+                "tag": "plain_text",
+                "content": "🤖 内容由 AI 自动生成，仅供参考"
+            }]
         })
         
         card = {
@@ -190,9 +162,9 @@ class FeishuBot:
             "header": {
                 "title": {
                     "tag": "plain_text",
-                    "content": "🌅 每日热榜精选"
+                    "content": "📰 每日 AI & 跨境简报"
                 },
-                "template": "orange"
+                "template": "blue"
             },
             "elements": elements
         }

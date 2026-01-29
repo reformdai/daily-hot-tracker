@@ -24,8 +24,9 @@ class ContentItem:
     
     # AI 评分结果 (后续填充)
     ai_score: float = 0.0            # AI 综合评分
-    ai_summary: str = ""             # AI 生成的一句话介绍（这是什么）
-    ai_reason: str = ""              # AI 评分理由（为什么值得关注）
+    ai_title: str = ""               # AI 生成的中文标题
+    ai_summary: str = ""             # AI 生成的深度简讯 (120-140字)
+    ai_reason: str = ""              # (已弃用) 评分理由
     
     def to_dict(self) -> dict:
         return {
@@ -40,8 +41,8 @@ class ContentItem:
             "comments": self.comments,
             "published_at": self.published_at.isoformat() if self.published_at else None,
             "ai_score": self.ai_score,
+            "ai_title": self.ai_title,
             "ai_summary": self.ai_summary,
-            "ai_reason": self.ai_reason,
         }
     
     def __str__(self) -> str:

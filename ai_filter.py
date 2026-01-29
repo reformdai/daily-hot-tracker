@@ -12,23 +12,8 @@ import config
 class AIFilter:
     """AI 内容筛选评分"""
     
-    SCORE_PROMPT = """你是一个专业的科技内容评估专家，专注于 AI/LLM 和跨境电商领域。
-
-请对以下内容进行评分 (1-10分)，评估维度：
-1. 相关性：是否与 AI/LLM 或跨境电商相关
-2. 创新性：是否有新观点、新产品、新趋势
-3. 实用价值：对从业者/创业者是否有参考价值
-4. 信息密度：内容是否干货充足，而非营销水文
-
-评分标准：
-- 9-10分：重大突破/必读内容
-- 7-8分：有价值的优质内容
-- 5-6分：一般内容，有一定参考价值
-- 3-4分：价值较低
-- 1-2分：无关或低质量
-
-请用以下 JSON 格式回复：
-{{"score": 8, "summary": "一句话介绍这是什么（20-40字）", "reason": "为什么值得关注（20-30字）"}}
+    SCORE_PROMPT = """你是一位资深的科技媒体主编，正在为专业读者编写一份"AI与跨境电商"的每日简报。
+请评估以下内容，打分并撰写深度简讯。
 
 待评估内容：
 ---
@@ -37,36 +22,46 @@ class AIFilter:
 描述: {description}
 ---
 
-只返回 JSON，不要其他内容。"""
+任务要求：
+1. score (1-10分): 8-10分(必读/重大新闻), 6-7分(值得关注), 1-5分(普通/无关)。
+2. title_cn: 将标题翻译为信达雅的中文标题。
+3. summary: 用中文撰写一段 120-140 字的深度简讯。
+   - 风格：专业、客观、高信息密度。
+   - 结构：一句话讲清是什么 -> 核心功能/亮点 -> 行业意义/价值。
+   - 语气：不要用"非常推荐"等主观词汇，用事实说话。包含硬核信息(参数/融资额等)。
 
-    BATCH_PROMPT = """你是一个专业的科技内容评估专家，专注于 AI/LLM 和跨境电商领域。
+请回复纯 JSON：
+{{"score": 8.5, "title_cn": "中文标题", "summary": "深度简讯内容..."}}
+"""
 
-请对以下多条内容逐一评分 (1-10分) 并生成简介。
+    BATCH_PROMPT = """你是一位资深的科技媒体主编，正在为专业读者编写一份"AI与跨境电商"的每日简报。
+请评估以下多条内容，打分并撰写深度简讯。
 
-评分标准：
-- 9-10分：重大突破/必读内容
-- 7-8分：有价值的优质内容
-- 5-6分：一般内容
-- 1-4分：价值较低或无关
+评分标准 (1-10分)：
+- 8-10分：行业重大新闻、颠覆性技术、热门开源项目 (必须入选)
+- 6-7分：有价值的技术更新、深度观点、实用工具 (值得关注)
+- 1-5分：普通资讯、营销文、无关内容 (不推荐)
+
+任务要求：
+1. score: 给出评分。
+2. title_cn: 将标题翻译为信达雅的中文标题（如果是英文）。
+3. summary: 用中文撰写一段 120-140 字的深度简讯。
+   - 风格：专业、客观、高信息密度 (类似 TechCrunch/36Kr 风格)。
+   - 结构：一句话讲清是什么 -> 核心功能/亮点 -> 行业意义/价值。
+   - 语气：不要用"这款工具"、"该项目"开头，直接说主语。不要用"非常推荐"等主观词汇，用事实说话。
+   - 必须包含：核心参数、技术架构、主要功能、融资数据等硬核信息（如果有）。
 
 待评估内容列表：
 ---
 {items_text}
 ---
 
-请用以下 JSON 数组格式回复：
+请回复纯 JSON 数组：
 [
-    {{"index": 0, "score": 8, "summary": "一句话介绍这是什么（产品/项目/新闻的核心内容，20-40字）", "reason": "为什么值得关注（亮点/价值，15-25字）"}},
-    {{"index": 1, "score": 6, "summary": "...", "reason": "..."}},
+    {{"index": 0, "score": 9.5, "title_cn": "中文标题", "summary": "这里是120-140字的深度简讯..."}},
     ...
 ]
-
-注意：
-- summary 要说清楚"这是什么"，让读者一眼就懂
-- reason 要说"为什么重要/值得关注"
-- 不要用"相关性高"这种评价性语言，要说具体内容
-
-只返回 JSON 数组，不要其他内容。"""
+"""
 
     def __init__(self, provider: str = None):
         """
@@ -135,12 +130,12 @@ class AIFilter:
         resp.raise_for_status()
         return resp.json()["content"][0]["text"]
     
-    def score_single(self, item: ContentItem) -> Tuple[float, str]:
+    def score_single(self, item: ContentItem) -> Tuple[float, str, str]:
         """
         对单个内容评分
         
         Returns:
-            (score, reason)
+            (score, title_cn, summary)
         """
         prompt = self.SCORE_PROMPT.format(
             title=item.title,
@@ -151,22 +146,25 @@ class AIFilter:
         try:
             response = self._call_llm(prompt)
             # 解析 JSON
+            response = response.strip()
+            if response.startswith("```"):
+                response = response.split("```")[1]
+                if response.startswith("json"):
+                    response = response[4:]
+            
             result = json.loads(response.strip())
-            return float(result.get("score", 0)), result.get("reason", "")
+            return (
+                float(result.get("score", 0)), 
+                result.get("title_cn", item.title),
+                result.get("summary", "")
+            )
         except Exception as e:
             print(f"[AIFilter] Error scoring item: {e}")
-            return 0.0, f"评分失败: {e}"
+            return 0.0, item.title, f"评分失败: {e}"
     
     def score_batch(self, items: List[ContentItem], batch_size: int = 5) -> List[ContentItem]:
         """
         批量评分 (更高效)
-        
-        Args:
-            items: 内容列表
-            batch_size: 每批处理数量
-            
-        Returns:
-            带有 AI 评分的内容列表
         """
         scored_items = []
         
@@ -199,16 +197,17 @@ class AIFilter:
                     idx = result.get("index", 0)
                     if idx < len(batch):
                         batch[idx].ai_score = float(result.get("score", 0))
+                        batch[idx].ai_title = result.get("title_cn", batch[idx].title)
                         batch[idx].ai_summary = result.get("summary", "")
-                        batch[idx].ai_reason = result.get("reason", "")
                 
             except Exception as e:
                 print(f"[AIFilter] Batch scoring error: {e}")
                 # 失败时逐个评分
                 for item in batch:
-                    score, reason = self.score_single(item)
+                    score, title_cn, summary = self.score_single(item)
                     item.ai_score = score
-                    item.ai_reason = reason
+                    item.ai_title = title_cn
+                    item.ai_summary = summary
             
             scored_items.extend(batch)
         
@@ -217,14 +216,6 @@ class AIFilter:
     def filter_top(self, items: List[ContentItem], top_n: int = 10, min_score: float = 6.0) -> List[ContentItem]:
         """
         评分并筛选 Top N
-        
-        Args:
-            items: 原始内容列表
-            top_n: 保留数量
-            min_score: 最低分数阈值
-            
-        Returns:
-            筛选后的内容列表
         """
         # 批量评分
         scored_items = self.score_batch(items)
