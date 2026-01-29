@@ -1,14 +1,14 @@
 """
-Reddit 数据抓取
+Reddit 数据抓取 (通过 RSS)
 """
-import requests
+import feedparser
 from datetime import datetime
 from typing import List
 from .base import BaseFetcher, ContentItem
 
 
 class RedditFetcher(BaseFetcher):
-    """Reddit 热帖抓取"""
+    """Reddit 热帖抓取 (RSS版，更稳定防403)"""
     
     name = "Reddit"
     
@@ -26,59 +26,59 @@ class RedditFetcher(BaseFetcher):
         per_sub_limit = max(5, limit // len(self.subreddits))
         
         for subreddit in self.subreddits:
-            items = self._fetch_subreddit(subreddit, per_sub_limit)
+            items = self._fetch_subreddit_rss(subreddit, per_sub_limit)
             all_items.extend(items)
         
-        # 按分数排序，取 top
-        all_items.sort(key=lambda x: x.score, reverse=True)
+        # 按分数排序 (RSS里没有分数，只能按时间或默认顺序)
+        # 通常 RSS 也是按热度排序的 (hot.rss)
         return all_items[:limit]
     
-    def _fetch_subreddit(self, subreddit: str, limit: int) -> List[ContentItem]:
-        """获取单个 subreddit 的热帖"""
+    def _fetch_subreddit_rss(self, subreddit: str, limit: int) -> List[ContentItem]:
+        """通过 RSS 获取单个 subreddit 的热帖"""
         items = []
+        url = f"https://www.reddit.com/r/{subreddit}/hot.rss"
         
         try:
-            resp = requests.get(
-                f"https://www.reddit.com/r/{subreddit}/hot.json",
-                params={"limit": limit},
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-                },
-                timeout=15
+            # 使用浏览器 UA
+            feed = feedparser.parse(
+                url,
+                agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
             )
-            resp.raise_for_status()
-            data = resp.json()
             
-            for post in data.get("data", {}).get("children", []):
-                post_data = post.get("data", {})
+            for entry in feed.entries[:limit]:
+                # 尝试从 entry 中提取更多信息
+                # RSS entry 通常包含: title, link, updated, summary, author
                 
-                # 跳过置顶帖和广告
-                if post_data.get("stickied") or post_data.get("is_ad"):
-                    continue
+                # 处理时间
+                published_at = None
+                if hasattr(entry, "published_parsed"):
+                    try:
+                        published_at = datetime(*entry.published_parsed[:6])
+                    except:
+                        pass
                 
-                # 获取实际链接 (如果是外链则用外链，否则用 reddit 链接)
-                url = post_data.get("url", "")
-                if url.startswith("/r/") or "reddit.com" in url:
-                    url = f"https://www.reddit.com{post_data.get('permalink', '')}"
-                
-                created_utc = post_data.get("created_utc", 0)
-                published_at = datetime.fromtimestamp(created_utc) if created_utc else None
-                
+                # 尝试从 summary 中提取一些文本作为 description
+                # Reddit RSS 的 summary 是 HTML，包含预览图等，直接用可能太乱
+                # 简单清洗一下或者截取
+                description = entry.summary if hasattr(entry, "summary") else ""
+                if "<" in description:
+                    # 简单去除 HTML 标签 (或者只取前一部分)
+                    # 这里为了简单，暂不引入 BeautifulSoup，直接截取
+                    pass 
+
                 items.append(ContentItem(
-                    id=f"reddit_{post_data.get('id', '')}",
-                    title=post_data.get("title", ""),
-                    url=url,
+                    id=f"reddit_{entry.id if hasattr(entry, 'id') else entry.link}",
+                    title=entry.title,
+                    url=entry.link,
                     source=f"Reddit r/{subreddit}",
                     category=subreddit,
-                    description=post_data.get("selftext", "")[:500],  # 限制长度
-                    author=post_data.get("author", ""),
-                    score=post_data.get("score", 0),
-                    comments=post_data.get("num_comments", 0),
+                    description=description[:500],
+                    author=entry.author if hasattr(entry, "author") else "",
+                    score=0, # RSS 不提供实时分数，设为0
+                    comments=0, # RSS 不提供评论数
                     published_at=published_at,
                     extra={
                         "subreddit": subreddit,
-                        "reddit_url": f"https://www.reddit.com{post_data.get('permalink', '')}",
-                        "upvote_ratio": post_data.get("upvote_ratio", 0),
                     }
                 ))
             
