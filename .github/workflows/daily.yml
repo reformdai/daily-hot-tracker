@@ -3,7 +3,7 @@ name: Daily Hot Tracker
 on:
   schedule:
     # 每天 UTC 0:00 运行 (北京时间 8:00)
-    - cron: '0 0 * * *'
+    - cron: '30 1 * * *'
   workflow_dispatch:  # 支持手动触发
 
 jobs:
