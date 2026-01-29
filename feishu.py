@@ -124,12 +124,16 @@ class FeishuBot:
             # 优先使用 AI 生成的中文标题
             title_text = item.ai_title if item.ai_title else item.title
             
+            # 增加分类标签
+            if item.ai_category:
+                title_text = f"【{item.ai_category}】{title_text}"
+            
             # 正文内容
             summary_text = item.ai_summary if item.ai_summary else item.description[:100]
             
             # 构建 Markdown 内容
             # 格式:
-            # **标题**
+            # **【分类】标题**
             # 正文内容... [来源](url)
             
             content_md = f"**{title_text}**\n\n{summary_text} [来源]({item.url})"

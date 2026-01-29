@@ -26,6 +26,7 @@ class ContentItem:
     ai_score: float = 0.0            # AI 综合评分
     ai_title: str = ""               # AI 生成的中文标题
     ai_summary: str = ""             # AI 生成的深度简讯 (120-140字)
+    ai_category: str = ""            # AI 分类
     ai_reason: str = ""              # (已弃用) 评分理由
     
     def to_dict(self) -> dict:

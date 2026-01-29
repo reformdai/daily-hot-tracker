@@ -13,7 +13,7 @@ class AIFilter:
     """AI 内容筛选评分"""
     
     SCORE_PROMPT = """你是一位资深的科技媒体主编，正在为专业读者编写一份"AI与跨境电商"的每日简报。
-请评估以下内容，打分并撰写深度简讯。
+请评估以下内容，打分、分类并撰写深度简讯。
 
 待评估内容：
 ---
@@ -24,18 +24,16 @@ class AIFilter:
 
 任务要求：
 1. score (1-10分): 8-10分(必读/重大新闻), 6-7分(值得关注), 1-5分(普通/无关)。
-2. title_cn: 将标题翻译为信达雅的中文标题。
-3. summary: 用中文撰写一段 120-140 字的深度简讯。
-   - 风格：专业、客观、高信息密度。
-   - 结构：一句话讲清是什么 -> 核心功能/亮点 -> 行业意义/价值。
-   - 语气：不要用"非常推荐"等主观词汇，用事实说话。包含硬核信息(参数/融资额等)。
+2. category: 选择一个最匹配的分类 [开源项目, 技术解读, 产品发布, 行业动态, 创业出海, 其他]。
+3. title_cn: 将标题翻译为信达雅的中文标题。
+4. summary: 用中文撰写一段 120-140 字的深度简讯。包含硬核信息。
 
 请回复纯 JSON：
-{{"score": 8.5, "title_cn": "中文标题", "summary": "深度简讯内容..."}}
+{{"score": 8.5, "category": "技术解读", "title_cn": "中文标题", "summary": "深度简讯内容..."}}
 """
 
     BATCH_PROMPT = """你是一位资深的科技媒体主编，正在为专业读者编写一份"AI与跨境电商"的每日简报。
-请评估以下多条内容，打分并撰写深度简讯。
+请评估以下多条内容，打分、分类并撰写深度简讯。
 
 评分标准 (1-10分)：
 - 8-10分：行业重大新闻、颠覆性技术、热门开源项目 (必须入选)
@@ -44,11 +42,12 @@ class AIFilter:
 
 任务要求：
 1. score: 给出评分。
-2. title_cn: 将标题翻译为信达雅的中文标题（如果是英文）。
-3. summary: 用中文撰写一段 120-140 字的深度简讯。
-   - 风格：专业、客观、高信息密度 (类似 TechCrunch/36Kr 风格)。
+2. category: 选择一个最匹配的分类 [开源项目, 技术解读, 产品发布, 行业动态, 创业出海, 其他]。
+3. title_cn: 将标题翻译为信达雅的中文标题。
+4. summary: 用中文撰写一段 120-140 字的深度简讯。
+   - 风格：专业、客观、高信息密度。
    - 结构：一句话讲清是什么 -> 核心功能/亮点 -> 行业意义/价值。
-   - 语气：不要用"这款工具"、"该项目"开头，直接说主语。不要用"非常推荐"等主观词汇，用事实说话。
+   - 语气：不要用"这款工具"、"该项目"开头，直接说主语。用事实说话。
    - 必须包含：核心参数、技术架构、主要功能、融资数据等硬核信息（如果有）。
 
 待评估内容列表：
@@ -58,7 +57,7 @@ class AIFilter:
 
 请回复纯 JSON 数组：
 [
-    {{"index": 0, "score": 9.5, "title_cn": "中文标题", "summary": "这里是120-140字的深度简讯..."}},
+    {{"index": 0, "score": 9.5, "category": "开源项目", "title_cn": "中文标题", "summary": "简讯内容..."}},
     ...
 ]
 """
@@ -130,12 +129,12 @@ class AIFilter:
         resp.raise_for_status()
         return resp.json()["content"][0]["text"]
     
-    def score_single(self, item: ContentItem) -> Tuple[float, str, str]:
+    def score_single(self, item: ContentItem) -> Tuple[float, str, str, str]:
         """
         对单个内容评分
         
         Returns:
-            (score, title_cn, summary)
+            (score, title_cn, summary, category)
         """
         prompt = self.SCORE_PROMPT.format(
             title=item.title,
@@ -156,11 +155,12 @@ class AIFilter:
             return (
                 float(result.get("score", 0)), 
                 result.get("title_cn", item.title),
-                result.get("summary", "")
+                result.get("summary", ""),
+                result.get("category", "")
             )
         except Exception as e:
             print(f"[AIFilter] Error scoring item: {e}")
-            return 0.0, item.title, f"评分失败: {e}"
+            return 0.0, item.title, f"评分失败: {e}", ""
     
     def score_batch(self, items: List[ContentItem], batch_size: int = 5) -> List[ContentItem]:
         """
@@ -199,15 +199,17 @@ class AIFilter:
                         batch[idx].ai_score = float(result.get("score", 0))
                         batch[idx].ai_title = result.get("title_cn", batch[idx].title)
                         batch[idx].ai_summary = result.get("summary", "")
+                        batch[idx].ai_category = result.get("category", "")
                 
             except Exception as e:
                 print(f"[AIFilter] Batch scoring error: {e}")
                 # 失败时逐个评分
                 for item in batch:
-                    score, title_cn, summary = self.score_single(item)
+                    score, title_cn, summary, category = self.score_single(item)
                     item.ai_score = score
                     item.ai_title = title_cn
                     item.ai_summary = summary
+                    item.ai_category = category
             
             scored_items.extend(batch)
         
