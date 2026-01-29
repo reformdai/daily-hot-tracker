@@ -1,0 +1,238 @@
+"""
+AI 筛选评分模块
+支持 DeepSeek / OpenAI / Anthropic
+"""
+import json
+import requests
+from typing import List, Tuple
+from fetchers.base import ContentItem
+import config
+
+
+class AIFilter:
+    """AI 内容筛选评分"""
+    
+    SCORE_PROMPT = """你是一个专业的科技内容评估专家，专注于 AI/LLM 和跨境电商领域。
+
+请对以下内容进行评分 (1-10分)，评估维度：
+1. 相关性：是否与 AI/LLM 或跨境电商相关
+2. 创新性：是否有新观点、新产品、新趋势
+3. 实用价值：对从业者/创业者是否有参考价值
+4. 信息密度：内容是否干货充足，而非营销水文
+
+评分标准：
+- 9-10分：重大突破/必读内容
+- 7-8分：有价值的优质内容
+- 5-6分：一般内容，有一定参考价值
+- 3-4分：价值较低
+- 1-2分：无关或低质量
+
+请用以下 JSON 格式回复：
+{{"score": 8, "summary": "一句话介绍这是什么（20-40字）", "reason": "为什么值得关注（20-30字）"}}
+
+待评估内容：
+---
+标题: {title}
+来源: {source}
+描述: {description}
+---
+
+只返回 JSON，不要其他内容。"""
+
+    BATCH_PROMPT = """你是一个专业的科技内容评估专家，专注于 AI/LLM 和跨境电商领域。
+
+请对以下多条内容逐一评分 (1-10分) 并生成简介。
+
+评分标准：
+- 9-10分：重大突破/必读内容
+- 7-8分：有价值的优质内容
+- 5-6分：一般内容
+- 1-4分：价值较低或无关
+
+待评估内容列表：
+---
+{items_text}
+---
+
+请用以下 JSON 数组格式回复：
+[
+    {{"index": 0, "score": 8, "summary": "一句话介绍这是什么（产品/项目/新闻的核心内容，20-40字）", "reason": "为什么值得关注（亮点/价值，15-25字）"}},
+    {{"index": 1, "score": 6, "summary": "...", "reason": "..."}},
+    ...
+]
+
+注意：
+- summary 要说清楚"这是什么"，让读者一眼就懂
+- reason 要说"为什么重要/值得关注"
+- 不要用"相关性高"这种评价性语言，要说具体内容
+
+只返回 JSON 数组，不要其他内容。"""
+
+    def __init__(self, provider: str = None):
+        """
+        Args:
+            provider: AI 提供商 (deepseek/openai/anthropic)
+        """
+        self.provider = provider or config.AI_PROVIDER
+        self.model_config = config.AI_MODELS.get(self.provider, {})
+        
+    def _get_api_key(self) -> str:
+        """获取对应的 API Key"""
+        if self.provider == "deepseek":
+            return config.DEEPSEEK_API_KEY
+        elif self.provider == "openai":
+            return config.OPENAI_API_KEY
+        elif self.provider == "anthropic":
+            return config.ANTHROPIC_API_KEY
+        return ""
+    
+    def _call_llm(self, prompt: str) -> str:
+        """调用 LLM API"""
+        api_key = self._get_api_key()
+        if not api_key:
+            raise ValueError(f"Missing API key for provider: {self.provider}")
+        
+        if self.provider == "anthropic":
+            return self._call_anthropic(prompt, api_key)
+        else:
+            return self._call_openai_compatible(prompt, api_key)
+    
+    def _call_openai_compatible(self, prompt: str, api_key: str) -> str:
+        """调用 OpenAI 兼容 API (OpenAI / DeepSeek)"""
+        resp = requests.post(
+            f"{self.model_config['base_url']}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.model_config["model"],
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 2000,
+            },
+            timeout=60
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    
+    def _call_anthropic(self, prompt: str, api_key: str) -> str:
+        """调用 Anthropic API"""
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": self.model_config["model"],
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 2000,
+            },
+            timeout=60
+        )
+        resp.raise_for_status()
+        return resp.json()["content"][0]["text"]
+    
+    def score_single(self, item: ContentItem) -> Tuple[float, str]:
+        """
+        对单个内容评分
+        
+        Returns:
+            (score, reason)
+        """
+        prompt = self.SCORE_PROMPT.format(
+            title=item.title,
+            source=item.source,
+            description=item.description[:500] if item.description else "(无描述)"
+        )
+        
+        try:
+            response = self._call_llm(prompt)
+            # 解析 JSON
+            result = json.loads(response.strip())
+            return float(result.get("score", 0)), result.get("reason", "")
+        except Exception as e:
+            print(f"[AIFilter] Error scoring item: {e}")
+            return 0.0, f"评分失败: {e}"
+    
+    def score_batch(self, items: List[ContentItem], batch_size: int = 5) -> List[ContentItem]:
+        """
+        批量评分 (更高效)
+        
+        Args:
+            items: 内容列表
+            batch_size: 每批处理数量
+            
+        Returns:
+            带有 AI 评分的内容列表
+        """
+        scored_items = []
+        
+        for i in range(0, len(items), batch_size):
+            batch = items[i:i + batch_size]
+            
+            # 构建批量文本
+            items_text = ""
+            for idx, item in enumerate(batch):
+                items_text += f"""
+[{idx}] 标题: {item.title}
+    来源: {item.source}
+    描述: {item.description[:200] if item.description else "(无描述)"}
+"""
+            
+            prompt = self.BATCH_PROMPT.format(items_text=items_text)
+            
+            try:
+                response = self._call_llm(prompt)
+                # 清理响应中可能的 markdown 代码块
+                response = response.strip()
+                if response.startswith("```"):
+                    response = response.split("```")[1]
+                    if response.startswith("json"):
+                        response = response[4:]
+                
+                results = json.loads(response.strip())
+                
+                for result in results:
+                    idx = result.get("index", 0)
+                    if idx < len(batch):
+                        batch[idx].ai_score = float(result.get("score", 0))
+                        batch[idx].ai_summary = result.get("summary", "")
+                        batch[idx].ai_reason = result.get("reason", "")
+                
+            except Exception as e:
+                print(f"[AIFilter] Batch scoring error: {e}")
+                # 失败时逐个评分
+                for item in batch:
+                    score, reason = self.score_single(item)
+                    item.ai_score = score
+                    item.ai_reason = reason
+            
+            scored_items.extend(batch)
+        
+        return scored_items
+    
+    def filter_top(self, items: List[ContentItem], top_n: int = 10, min_score: float = 6.0) -> List[ContentItem]:
+        """
+        评分并筛选 Top N
+        
+        Args:
+            items: 原始内容列表
+            top_n: 保留数量
+            min_score: 最低分数阈值
+            
+        Returns:
+            筛选后的内容列表
+        """
+        # 批量评分
+        scored_items = self.score_batch(items)
+        
+        # 过滤低分
+        filtered = [item for item in scored_items if item.ai_score >= min_score]
+        
+        # 按 AI 分数排序
+        filtered.sort(key=lambda x: x.ai_score, reverse=True)
+        
+        return filtered[:top_n]

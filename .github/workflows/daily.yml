@@ -1,0 +1,52 @@
+name: Daily Hot Tracker
+
+on:
+  schedule:
+    # 每天 UTC 0:00 运行 (北京时间 8:00)
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run daily tracker
+        env:
+          # AI API Keys (选择一个即可)
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          
+          # 飞书推送
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          
+          # Product Hunt API (可选)
+          PRODUCTHUNT_TOKEN: ${{ secrets.PRODUCTHUNT_TOKEN }}
+          
+          # AI 提供商选择
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'deepseek' }}
+        run: |
+          python main.py
+      
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: logs/
+          retention-days: 7
