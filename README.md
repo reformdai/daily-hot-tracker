@@ -1,114 +1,115 @@
-# Daily Hot Tracker
+# 🤖 AI Daily Hot Tracker (每日热点追踪器)
 
-每日热榜聚合器 - 自动抓取多平台热门内容，AI 智能筛选，推送到飞书。
+一个智能化的每日科技简报生成器。它能自动从 Hacker News、GitHub、Reddit、Product Hunt 等平台抓取 AI 与跨境电商领域的热门内容，利用 DeepSeek/OpenAI 大模型进行深度阅读、评分和分类，最终生成一份高质量的**中文深度简报**推送到你的飞书群。
 
-## 功能特性
+> **特点**：全自动运行、AI 深度摘要、拒绝标题党、免费部署 (GitHub Actions)。
 
-- **多平台数据源**
-  - Hacker News - 技术社区热榜
-  - Product Hunt - 每日新产品
-  - GitHub Trending - 开源项目趋势
-  - Reddit - 多个 subreddit 热帖
-  - RSS 订阅 - TechCrunch、a16z、YC 等
+---
 
-- **AI 智能筛选**
-  - 支持 DeepSeek / OpenAI / Anthropic
-  - 基于相关性、创新性、实用价值评分
-  - 自动过滤低质量内容
+## ✨ 核心功能
 
-- **飞书推送**
-  - 精美卡片消息
-  - 每日定时推送
+- **🔥 多源热点聚合**
+  - **Hacker News**: 科技圈最硬核的讨论
+  - **GitHub Trending**: 今日增长最快的开源项目
+  - **Product Hunt**: 每日最佳新产品
+  - **Reddit**: 热门社区讨论 (r/LocalLLaMA, r/MachineLearning 等)
+  - **Tech Blog**: OpenAI, Anthropic, a16z, TechCrunch 等 RSS 订阅
 
-## 快速开始
+- **🧠 AI 智能处理**
+  - **智能评分**: 过滤掉低价值内容，只保留 Top 10
+  - **深度简讯**: AI 变身主编，撰写 120 字中文深度摘要，讲清"是什么"和"为什么重要"
+  - **自动分类**: 自动打标签 (【开源项目】, 【技术解读】, 【行业新闻】)
 
-### 1. 安装依赖
+- **📱 优雅推送**
+  - 支持 **飞书 (Feishu)** 卡片消息
+  - 格式清爽：`【分类】标题` + `深度摘要` + `来源链接`
+  - 每天定时推送 (默认北京时间 09:30)
 
-```bash
-cd daily-hot-tracker
-pip install -r requirements.txt
-```
+## 📸 推送效果预览
 
-### 2. 配置环境变量
+**(飞书卡片消息)**
 
-复制 `.env.example` 为 `.env`，填入你的配置：
+> **📅 2026-02-02 | 精选 10 条高价值内容**
+> -----------------------------------
+> **【开源项目】DeepSeek-V2-Chat 发布**
+> 
+> DeepSeek 推出的第二代 MoE 架构大模型，参数量 236B，激活参数 21B。相比前代，它在代码生成和数学推理能力上有显著提升，且推理成本降低了 40%。该模型已完全开源，支持 128K 上下文，是目前最强的开源 MoE 模型之一。 [来源]
+> 
+> -----------------------------------
+> **【行业新闻】Sora 正式向公众开放**
+> ...
 
-```bash
-cp .env.example .env
-```
+---
 
-必填项：
-- `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY` - AI 评分用
-- `FEISHU_WEBHOOK_URL` - 飞书推送用
+## 🚀 快速开始
 
-### 3. 运行
+### 方式一：使用 GitHub Actions (推荐，免费 & 自动)
 
-```bash
-# 完整运行
-python main.py
+无需服务器，Fork 本项目即可运行。
 
-# 跳过 AI 评分（仅按热度排序）
-python main.py --no-ai
+1. **Fork 本仓库** 到你的 GitHub 账号。
+2. **配置 Secrets**:
+   进入 `Settings` -> `Secrets and variables` -> `Actions`，添加以下 Repository secrets:
+   - `DEEPSEEK_API_KEY`: 你的 DeepSeek API Key (或 OpenAI/Anthropic Key)
+   - `FEISHU_WEBHOOK_URL`: 你的飞书机器人 Webhook 地址
+   - `PRODUCTHUNT_TOKEN`: (可选) Product Hunt Developer Token
+3. **启用 Workflow**:
+   进入 `Actions` 页面，点击 `I understand my workflows, go ahead and enable them`。
+4. **手动触发测试**:
+   在 `Actions` -> `Daily Hot Tracker` -> `Run workflow` 手动运行一次。
+5. **坐等推送**:
+   默认每天 **北京时间 09:30** 自动推送。
 
-# 仅测试，不推送
-python main.py --dry-run
+### 方式二：本地运行
 
-# 指定保留条数
-python main.py --limit 15
-```
+1. **克隆项目**
+   ```bash
+   git clone https://github.com/your-username/daily-hot-tracker.git
+   cd daily-hot-tracker
+   ```
 
-## 配置飞书机器人
+2. **安装依赖**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
 
-1. 打开飞书，进入目标群聊
-2. 点击右上角 `...` → `群设置` → `群机器人` → `添加机器人`
-3. 选择 `自定义机器人`
-4. 复制 Webhook 地址，填入 `.env` 文件
+3. **配置环境变量**
+   复制 `.env.example` 为 `.env`，并填入你的 Key：
+   ```bash
+   cp .env.example .env
+   vim .env
+   ```
 
-## GitHub Actions 自动运行
+4. **运行**
+   ```bash
+   python main.py
+   
+   # 常用选项
+   python main.py --limit 5  # 只处理前5条
+   python main.py --no-ai    # 不使用AI (仅抓取)
+   python main.py --dry-run  # 不推送到飞书
+   ```
 
-1. Fork 本仓库
-2. 在仓库 Settings → Secrets and variables → Actions 中添加：
-   - `DEEPSEEK_API_KEY` (或其他 AI 提供商的 key)
-   - `FEISHU_WEBHOOK_URL`
-3. 工作流会在每天北京时间 8:00 自动运行
+---
 
-手动触发：Actions → Daily Hot Tracker → Run workflow
+## ⚙️ 配置说明 (`config.py`)
 
-## 自定义配置
+你可以修改 `config.py` 来自定义行为：
 
-编辑 `config.py` 可以自定义：
+- `KEYWORDS`: 设置你关心的关键词 (当前默认: AI, LLM, 跨境, RAG 等)
+- `RSS_FEEDS`: 添加你喜欢的博客 RSS 地址
+- `AI_PROVIDER`: 切换 AI 模型 (deepseek / openai / anthropic)
+- `TOP_N_ITEMS`: 每天推送的条数 (默认 10)
 
-- `KEYWORDS` - 关注的关键词
-- `TOP_N_ITEMS` - 每日推送条数
-- `RSS_FEEDS` - RSS 订阅源列表
-- `REDDIT_SUBREDDITS` - Reddit 关注的板块
-- `ENABLED_SOURCES` - 启用的数据源
+## 🛠️ 技术栈
 
-## 项目结构
+- **Python 3.11+**
+- **LLM API**: DeepSeek / OpenAI / Anthropic
+- **Feedparser**: RSS 解析
+- **GitHub Actions**: 定时任务调度
 
-```
-daily-hot-tracker/
-├── fetchers/              # 数据抓取模块
-│   ├── base.py           # 基类和数据模型
-│   ├── hackernews.py     # Hacker News
-│   ├── producthunt.py    # Product Hunt
-│   ├── github_trending.py # GitHub Trending
-│   ├── reddit.py         # Reddit
-│   └── rss_feeds.py      # RSS 订阅
-├── .github/workflows/    # GitHub Actions
-├── main.py               # 主程序入口
-├── ai_filter.py          # AI 筛选评分
-├── feishu.py             # 飞书推送
-├── config.py             # 配置文件
-├── requirements.txt      # 依赖
-└── .env.example          # 环境变量示例
-```
+## 📝 License
 
-## Token 消耗估算
-
-使用 DeepSeek V3：约 ¥2-3/月
-使用 GPT-4o-mini：约 ¥3-5/月
-
-## License
-
-MIT
+MIT License
