@@ -64,6 +64,26 @@ TOP_N_ITEMS = 10
 # AI 评分阈值 (1-10)
 MIN_SCORE_THRESHOLD = 6
 
+# ==================== 去重与排序增强 ====================
+# 标题相似度去重阈值（0-1）
+TITLE_DEDUP_SIMILARITY = float(os.getenv("TITLE_DEDUP_SIMILARITY", "0.84"))
+
+# 飞书已发送内容去重窗口（天）
+SENT_HISTORY_TTL_DAYS = int(os.getenv("SENT_HISTORY_TTL_DAYS", "7"))
+
+# 已发送历史文件
+SENT_HISTORY_PATH = os.getenv("SENT_HISTORY_PATH", "data/sent_history.json")
+
+# 优先来源（会用于质量分加权）
+PRIORITY_SOURCES = [
+    "Hacker News",
+    "GitHub Trending",
+    "Product Hunt",
+    "TechCrunch AI",
+    "OpenAI Blog",
+    "Anthropic",
+]
+
 # ==================== 数据源配置 ====================
 # 启用的数据源
 ENABLED_SOURCES = [

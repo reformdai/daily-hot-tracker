@@ -21,6 +21,13 @@ from fetchers import (
 )
 from ai_filter import AIFilter
 from feishu import FeishuBot
+from pipeline import (
+    deduplicate_items,
+    apply_quality_score,
+    sort_by_final_score,
+    filter_already_sent,
+    mark_sent,
+)
 
 
 def fetch_all_sources() -> List[ContentItem]:
@@ -76,25 +83,24 @@ def fetch_all_sources() -> List[ContentItem]:
 
 
 def prefilter_by_keywords(items: List[ContentItem]) -> List[ContentItem]:
-    """根据关键词预筛选"""
+    """根据关键词预筛选（用增强后的 final_rank_score 排序）"""
     print("\n🔍 关键词预筛选...")
-    
+
     keywords_lower = [k.lower() for k in config.KEYWORDS]
     filtered = []
-    
+
     for item in items:
         text = f"{item.title} {item.description} {item.category}".lower()
         if any(kw in text for kw in keywords_lower):
             filtered.append(item)
-    
+
     print(f"   筛选后剩余 {len(filtered)} 条 (原 {len(items)} 条)")
-    
-    # 按热度排序，只保留前 25 条给 AI 评分（加速）
-    filtered.sort(key=lambda x: x.score, reverse=True)
+
+    filtered = sort_by_final_score(filtered)
     if len(filtered) > 25:
-        print(f"   按热度取前 25 条给 AI 评分")
+        print("   按综合热度取前 25 条给 AI 评分")
         filtered = filtered[:25]
-    
+
     return filtered
 
 
@@ -167,35 +173,52 @@ def main():
             print("❌ 未获取到任何内容")
             return 1
         
-        # 2. 关键词预筛选
-        filtered_items = prefilter_by_keywords(all_items)
-        
+        # 2. 去重 + 质量评分增强（参考 multi-source digest 逻辑）
+        deduped_items = deduplicate_items(all_items, threshold=config.TITLE_DEDUP_SIMILARITY)
+        print(f"\n🧹 去重后剩余 {len(deduped_items)} 条 (原 {len(all_items)} 条)")
+
+        enhanced_items = apply_quality_score(deduped_items, priority_sources=config.PRIORITY_SOURCES)
+
+        # 3. 关键词预筛选
+        filtered_items = prefilter_by_keywords(enhanced_items)
+
         if not filtered_items:
             print("❌ 关键词筛选后无内容")
-            # 如果筛选后为空，使用原始热度排序
-            filtered_items = sorted(all_items, key=lambda x: x.score, reverse=True)[:50]
+            # 如果筛选后为空，使用增强排序回退
+            filtered_items = sort_by_final_score(enhanced_items)[:50]
         
-        # 3. AI 评分
+        # 4. AI 评分
         if args.no_ai:
             print("\n⏭️  跳过 AI 评分")
-            # 按原始热度排序
-            top_items = sorted(filtered_items, key=lambda x: x.score, reverse=True)[:config.TOP_N_ITEMS]
+            top_items = sort_by_final_score(filtered_items)[:config.TOP_N_ITEMS]
             for item in top_items:
-                item.ai_score = item.score / 10  # 简单转换
-                item.ai_reason = "热度排序"
+                item.ai_score = min(10, ((item.extra or {}).get("final_rank_score", item.score)) / 20)
+                item.ai_reason = "综合热度排序"
         else:
             top_items = ai_score_and_rank(filtered_items)
         
         if not top_items:
             print("❌ 无符合条件的内容")
             return 1
-        
-        # 4. 打印结果
-        print_results(top_items)
-        
-        # 5. 推送到飞书
+
+        # 5. 跨天去重（避免重复推送）
+        unsent_items = filter_already_sent(
+            top_items,
+            history_path=config.SENT_HISTORY_PATH,
+            ttl_days=config.SENT_HISTORY_TTL_DAYS,
+        )
+        if not unsent_items:
+            print("\n✅ 本次内容与近几天已发送内容重复，跳过推送")
+            return 0
+
+        # 6. 打印结果
+        print_results(unsent_items)
+
+        # 7. 推送到飞书
         if not args.no_push and not args.dry_run:
-            push_to_feishu(top_items)
+            success = push_to_feishu(unsent_items)
+            if success:
+                mark_sent(unsent_items, config.SENT_HISTORY_PATH)
         else:
             print("\n⏭️  跳过飞书推送")
         
