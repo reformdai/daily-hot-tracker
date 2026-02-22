@@ -25,8 +25,6 @@ from pipeline import (
     deduplicate_items,
     apply_quality_score,
     sort_by_final_score,
-    filter_already_sent,
-    mark_sent,
 )
 
 
@@ -201,24 +199,12 @@ def main():
             print("❌ 无符合条件的内容")
             return 1
 
-        # 5. 跨天去重（避免重复推送）
-        unsent_items = filter_already_sent(
-            top_items,
-            history_path=config.SENT_HISTORY_PATH,
-            ttl_days=config.SENT_HISTORY_TTL_DAYS,
-        )
-        if not unsent_items:
-            print("\n✅ 本次内容与近几天已发送内容重复，跳过推送")
-            return 0
+        # 5. 打印结果
+        print_results(top_items)
 
-        # 6. 打印结果
-        print_results(unsent_items)
-
-        # 7. 推送到飞书
+        # 6. 推送到飞书
         if not args.no_push and not args.dry_run:
-            success = push_to_feishu(unsent_items)
-            if success:
-                mark_sent(unsent_items, config.SENT_HISTORY_PATH)
+            push_to_feishu(top_items)
         else:
             print("\n⏭️  跳过飞书推送")
         
