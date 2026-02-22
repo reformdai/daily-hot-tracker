@@ -25,6 +25,7 @@ from pipeline import (
     deduplicate_items,
     apply_quality_score,
     sort_by_final_score,
+    apply_light_source_caps,
 )
 
 
@@ -199,10 +200,20 @@ def main():
             print("❌ 无符合条件的内容")
             return 1
 
-        # 5. 打印结果
+        # 5. 轻量防霸榜（不依赖历史存储）
+        top_items = apply_light_source_caps(
+            top_items,
+            max_github_items=config.MAX_GITHUB_ITEMS_PER_DAY,
+            min_ai_score_for_github=config.MIN_AI_SCORE_FOR_GITHUB,
+        )
+        if not top_items:
+            print("❌ 轻量限流后无可推送内容")
+            return 1
+
+        # 6. 打印结果
         print_results(top_items)
 
-        # 6. 推送到飞书
+        # 7. 推送到飞书
         if not args.no_push and not args.dry_run:
             push_to_feishu(top_items)
         else:

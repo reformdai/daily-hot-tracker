@@ -109,6 +109,31 @@ def sort_by_final_score(items: List[ContentItem]) -> List[ContentItem]:
     return sorted(items, key=lambda x: (x.extra or {}).get("final_rank_score", x.score), reverse=True)
 
 
+def apply_light_source_caps(
+    items: List[ContentItem],
+    max_github_items: int = 2,
+    min_ai_score_for_github: float = 8.0,
+) -> List[ContentItem]:
+    """轻量限流：限制 GitHub Trending 条数，并提高其入选门槛。"""
+    selected: List[ContentItem] = []
+    github_count = 0
+
+    for item in items:
+        source_lower = (item.source or "").lower()
+        is_github_trending = "github" in source_lower and "trending" in source_lower
+
+        if is_github_trending:
+            if item.ai_score < min_ai_score_for_github:
+                continue
+            if github_count >= max_github_items:
+                continue
+            github_count += 1
+
+        selected.append(item)
+
+    return selected
+
+
 def _fingerprint(item: ContentItem) -> str:
     domain = urlparse(item.url).netloc.lower() if item.url else ""
     return f"{normalize_title(item.title)}|{domain}"

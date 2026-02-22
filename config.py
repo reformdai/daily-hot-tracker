@@ -78,6 +78,10 @@ PRIORITY_SOURCES = [
     "Anthropic",
 ]
 
+# 轻量防霸榜配置（不依赖持久化）
+MAX_GITHUB_ITEMS_PER_DAY = int(os.getenv("MAX_GITHUB_ITEMS_PER_DAY", "2"))
+MIN_AI_SCORE_FOR_GITHUB = float(os.getenv("MIN_AI_SCORE_FOR_GITHUB", "8.0"))
+
 # ==================== 数据源配置 ====================
 # 启用的数据源
 ENABLED_SOURCES = [
