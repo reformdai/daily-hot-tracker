@@ -24,8 +24,8 @@ AI_PROVIDER = os.getenv("AI_PROVIDER", "deepseek")
 
 AI_MODELS = {
     "deepseek": {
-        "model": "deepseek-chat",
-        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-v4-pro",
+        "base_url": "https://api.deepseek.com/chat/completions",
     },
     "openai": {
         "model": "gpt-4o-mini",
