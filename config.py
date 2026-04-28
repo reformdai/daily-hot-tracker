@@ -24,7 +24,7 @@ AI_PROVIDER = os.getenv("AI_PROVIDER", "deepseek")
 
 AI_MODELS = {
     "deepseek": {
-        "model": "deepseek-v4-pro",
+        "model": "deepseek-v4-flash",
         "base_url": "https://api.deepseek.com",
     },
     "openai": {
