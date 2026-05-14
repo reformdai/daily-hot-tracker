@@ -7,6 +7,8 @@ from .producthunt import ProductHuntFetcher
 from .github_trending import GitHubTrendingFetcher
 from .reddit import RedditFetcher
 from .rss_feeds import RSSFetcher
+from .aihot import AIHotFetcher
+from .arxiv import ArxivFetcher
 
 __all__ = [
     "BaseFetcher",
@@ -16,4 +18,6 @@ __all__ = [
     "GitHubTrendingFetcher",
     "RedditFetcher",
     "RSSFetcher",
+    "AIHotFetcher",
+    "ArxivFetcher",
 ]

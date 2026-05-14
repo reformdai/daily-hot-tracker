@@ -101,64 +101,96 @@ class FeishuBot:
         
         return self._send(payload)
     
+    SECTION_ICONS = {
+        "模型发布": "🧠",
+        "产品发布": "🚀",
+        "行业动态": "📊",
+        "论文研究": "📝",
+        "技巧与观点": "💡",
+    }
+
+    SECTION_ORDER = ["模型发布", "产品发布", "行业动态", "论文研究", "技巧与观点"]
+
     def send_daily_digest(self, items: List[ContentItem]) -> bool:
-        """
-        发送每日精选简报 (Newsletter 风格)
-        """
         if not items:
             return False
-            
+
         elements = []
-        
-        # 顶部日期
+
         today = datetime.now().strftime("%Y-%m-%d")
         elements.append({
             "tag": "markdown",
             "content": f"📅 **{today}** | 精选 {len(items)} 条高价值内容"
         })
-        
-        elements.append({"tag": "hr"})
-        
-        # 逐条展示
+
+        sections: dict = {}
         for item in items:
-            # 优先使用 AI 生成的中文标题
-            title_text = item.ai_title if item.ai_title else item.title
-            
-            # 增加分类标签
-            if item.ai_category:
-                title_text = f"【{item.ai_category}】{title_text}"
-            
-            # 正文内容
-            summary_text = item.ai_summary if item.ai_summary else item.description[:100]
-            
-            # 构建 Markdown 内容
-            # 格式:
-            # **【分类】标题**
-            # 正文内容... [来源](url)
-            
-            content_md = f"**{title_text}**\n\n{summary_text} [来源]({item.url})"
-            
+            cat = item.ai_category or "行业动态"
+            sections.setdefault(cat, []).append(item)
+
+        idx = 0
+        for cat in self.SECTION_ORDER:
+            cat_items = sections.pop(cat, [])
+            if not cat_items:
+                continue
+            icon = self.SECTION_ICONS.get(cat, "📌")
+
+            elements.append({"tag": "hr"})
             elements.append({
                 "tag": "markdown",
-                "content": content_md
+                "content": f"**{icon} {cat}**"
             })
-            
-            # 增加一点间距，使用透明图片或空行 (飞书 markdown 支持有限，用 hr 做分割比较稳)
+
+            for item in cat_items:
+                idx += 1
+                title_text = item.ai_title if item.ai_title else item.title
+                summary_text = item.ai_summary if item.ai_summary else item.description[:100]
+                source_text = self._format_source(item)
+                content_md = (
+                    f"**{idx}. [{title_text}]({item.url})**\n"
+                    f"{summary_text}\n"
+                    f"🔗 来源: {source_text} | [查看原文]({item.url})"
+                )
+                elements.append({
+                    "tag": "markdown",
+                    "content": content_md
+                })
+
+        for cat, cat_items in sections.items():
+            if not cat_items:
+                continue
+            icon = self.SECTION_ICONS.get(cat, "📌")
+
             elements.append({"tag": "hr"})
-            
-        # 移除最后一个分割线（美观）
-        if elements and elements[-1]["tag"] == "hr":
-            elements.pop()
-            
-        # 底部说明
+            elements.append({
+                "tag": "markdown",
+                "content": f"**{icon} {cat}**"
+            })
+
+            for item in cat_items:
+                idx += 1
+                title_text = item.ai_title if item.ai_title else item.title
+                summary_text = item.ai_summary if item.ai_summary else item.description[:100]
+                source_text = self._format_source(item)
+                content_md = (
+                    f"**{idx}. [{title_text}]({item.url})**\n"
+                    f"{summary_text}\n"
+                    f"🔗 来源: {source_text} | [查看原文]({item.url})"
+                )
+                elements.append({
+                    "tag": "markdown",
+                    "content": content_md
+                })
+
+        elements.append({"tag": "hr"})
         elements.append({
             "tag": "note",
             "elements": [{
                 "tag": "plain_text",
-                "content": "🤖 内容由 AI 自动生成，仅供参考"
+                "content": "🤖 内容由 AI 自动筛选生成，仅供参考"
             }]
         })
-        
+
         card = {
             "config": {
                 "wide_screen_mode": True
@@ -166,20 +198,27 @@ class FeishuBot:
             "header": {
                 "title": {
                     "tag": "plain_text",
-                    "content": "📰 每日 AI & 跨境简报"
+                    "content": "📰 AI 每日精选"
                 },
                 "template": "blue"
             },
             "elements": elements
         }
-        
+
         payload = {
             "msg_type": "interactive",
             "card": card
         }
-        
+
         return self._send(payload)
     
+    def _format_source(self, item: ContentItem) -> str:
+        """格式化来源显示：AIHOT 显示原始信源，其他显示平台名"""
+        if item.source == "AIHOT" and item.author:
+            # AIHOT 的 author 字段是原始信源（如 "OpenAI：官网动态"、"X：宝玉"）
+            return f"AIHOT · {item.author}"
+        return item.source or "未知"
+
     def _get_score_emoji(self, score: float) -> str:
         """根据分数返回 emoji"""
         if score >= 9:

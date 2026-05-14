@@ -1,6 +1,6 @@
 # 🤖 AI Daily Hot Tracker (每日热点追踪器)
 
-一个智能化的每日科技简报生成器。它能自动从 Hacker News、GitHub、Reddit、Product Hunt 等平台抓取 AI 与跨境电商领域的热门内容，利用 DeepSeek/OpenAI 大模型进行深度阅读、评分和分类，最终生成一份高质量的**中文深度简报**推送到你的飞书群。
+一个智能化的 AI 领域每日精选生成器。它能自动从 Hacker News、GitHub、Reddit、Product Hunt、ArXiv、AIHOT 等平台抓取 AI 领域的热门内容，利用 DeepSeek/OpenAI 大模型进行深度阅读、评分和分类，最终生成一份高质量的**中文深度简报**推送到飞书群，并输出 RSS Feed 供订阅。
 
 > **特点**：全自动运行、AI 深度摘要、拒绝标题党、免费部署 (GitHub Actions)。
 
@@ -8,21 +8,23 @@
 
 ## ✨ 核心功能
 
-- **🔥 多源热点聚合**
+- **🔥 多源热点聚合（7 大数据源）**
   - **Hacker News**: 科技圈最硬核的讨论
   - **GitHub Trending**: 今日增长最快的开源项目
   - **Product Hunt**: 每日最佳新产品
   - **Reddit**: 热门社区讨论 (r/LocalLLaMA, r/MachineLearning 等)
+  - **ArXiv**: AI/ML 领域最新论文 (cs.AI, cs.CL, cs.LG, cs.CV)
+  - **AIHOT**: 接入 AIHOT 平台精选热点（配置 API Key 后启用）
   - **Tech Blog**: OpenAI, Anthropic, a16z, TechCrunch 等 RSS 订阅
 
 - **🧠 AI 智能处理**
   - **智能评分**: 过滤掉低价值内容，只保留 Top 10
   - **深度简讯**: AI 变身主编，撰写 120 字中文深度摘要，讲清"是什么"和"为什么重要"
-  - **自动分类**: 自动打标签 (【开源项目】, 【技术解读】, 【行业新闻】)
+  - **5 大版块分类**: 🧠 模型发布 / 🚀 产品发布 / 📊 行业动态 / 📝 论文研究 / 💡 技巧与观点
 
-- **📱 优雅推送**
-  - 支持 **飞书 (Feishu)** 卡片消息
-  - 格式清爽：`【分类】标题` + `深度摘要` + `来源链接`
+- **📱 多渠道输出**
+  - **飞书卡片消息**: 按版块分组展示，一目了然
+  - **RSS Feed**: 自动生成 feed.xml，可部署到 GitHub Pages 供订阅
   - 每天定时推送 (默认北京时间 09:30)
 
 ## 📸 推送效果预览

@@ -18,6 +18,8 @@ FEISHU_WEBHOOK_URL = os.getenv("FEISHU_WEBHOOK_URL", "")
 # Product Hunt API (可选，无 token 也能用公开数据)
 PRODUCTHUNT_TOKEN = os.getenv("PRODUCTHUNT_TOKEN", "")
 
+# AIHOT 是公开 API，无需配置 API key
+
 # ==================== AI 模型配置 ====================
 # 可选: deepseek, openai, anthropic
 AI_PROVIDER = os.getenv("AI_PROVIDER", "deepseek")
@@ -40,19 +42,35 @@ AI_MODELS = {
 # ==================== 筛选配置 ====================
 # 关注的关键词 (用于预筛选)
 KEYWORDS = [
-    # AI/LLM 相关
+    # AI/LLM 模型
     "AI", "LLM", "GPT", "Claude", "Gemini", "OpenAI", "Anthropic", "DeepSeek",
     "machine learning", "deep learning", "neural network", "transformer",
+    "Llama", "Mistral", "Qwen", "MoE", "RLHF", "reasoning",
+
+    # AI 应用与工具
     "chatbot", "agent", "RAG", "embedding", "fine-tuning", "prompt",
     "Stable Diffusion", "Midjourney", "DALL-E", "Sora", "generative",
-    
-    # 跨境/出海相关
-    "跨境", "出海", "cross-border", "e-commerce", "Shopify", "Amazon",
-    "TikTok Shop", "dropshipping", "DTC", "独立站",
-    
+    "Cursor", "Copilot", "coding assistant", "AI editor",
+
+    # AI 基础设施
+    "GPU", "CUDA", "inference", "training", "VRAM", "quantization",
+    "GGUF", "ONNX", "TensorRT", "MLOps", "vector database",
+
     # 创业/产品
     "startup", "founder", "YC", "funding", "Series A", "seed round",
     "SaaS", "B2B", "indie", "maker", "launch", "Product Hunt",
+
+    # 论文/研究
+    "arxiv", "paper", "benchmark", "SOTA", "attention", "diffusion",
+]
+
+# AI 内容分类体系（5 大版块）
+AI_CATEGORIES = [
+    "模型发布",
+    "产品发布",
+    "行业动态",
+    "论文研究",
+    "技巧与观点",
 ]
 
 # 每个来源获取的最大条目数
@@ -70,9 +88,11 @@ TITLE_DEDUP_SIMILARITY = float(os.getenv("TITLE_DEDUP_SIMILARITY", "0.84"))
 
 # 优先来源（会用于质量分加权）
 PRIORITY_SOURCES = [
+    "AIHOT",
     "Hacker News",
     "GitHub Trending",
     "Product Hunt",
+    "ArXiv",
     "TechCrunch AI",
     "OpenAI Blog",
     "Anthropic",
@@ -86,11 +106,12 @@ MIN_AI_SCORE_FOR_GITHUB = float(os.getenv("MIN_AI_SCORE_FOR_GITHUB", "8.0"))
 # 启用的数据源
 ENABLED_SOURCES = [
     "hackernews",
-    "producthunt", 
+    "producthunt",
     "github_trending",
-    "techcrunch",
     "reddit",
     "rss_feeds",
+    "aihot",
+    "arxiv",
 ]
 
 # Reddit 关注的 subreddit
@@ -117,6 +138,17 @@ RSS_FEEDS: List[Dict] = [
     {"name": "MIT Tech Review AI", "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed", "category": "AI"},
 ]
 
+# ArXiv 关注的分类
+ARXIV_CATEGORIES = [
+    "cs.AI",   # Artificial Intelligence
+    "cs.CL",   # Computation and Language (NLP)
+    "cs.LG",   # Machine Learning
+    "cs.CV",   # Computer Vision
+]
+
 # ==================== 推送配置 ====================
 # 推送时间 (用于 GitHub Actions cron)
 PUSH_HOUR_UTC = 0  # UTC 0点 = 北京时间 8点
+
+# RSS 输出路径
+RSS_OUTPUT_DIR = os.getenv("RSS_OUTPUT_DIR", "output")

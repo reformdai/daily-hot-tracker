@@ -6,43 +6,43 @@ on:
     - cron: '30 22 * * *'
   workflow_dispatch:  # 支持手动触发
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
+
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-      
+
       - name: Run daily tracker
         env:
-          # AI API Keys (选择一个即可)
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          
-          # 飞书推送
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-          
-          # Product Hunt API (可选)
           PRODUCTHUNT_TOKEN: ${{ secrets.PRODUCTHUNT_TOKEN }}
-          
-          # AI 提供商选择
+          AIHOT_API_KEY: ${{ secrets.AIHOT_API_KEY }}
           AI_PROVIDER: ${{ vars.AI_PROVIDER || 'deepseek' }}
+          RSS_OUTPUT_DIR: output
         run: |
           python main.py
-      
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -50,3 +50,20 @@ jobs:
           name: logs
           path: logs/
           retention-days: 7
+
+      - name: Deploy RSS to GitHub Pages
+        if: success()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: output/
+
+  deploy-pages:
+    needs: run
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

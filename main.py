@@ -18,6 +18,8 @@ from fetchers import (
     GitHubTrendingFetcher,
     RedditFetcher,
     RSSFetcher,
+    AIHotFetcher,
+    ArxivFetcher,
 )
 from ai_filter import AIFilter
 from feishu import FeishuBot
@@ -27,56 +29,36 @@ from pipeline import (
     sort_by_final_score,
     apply_light_source_caps,
 )
+from rss_output import generate_rss_feed
 
 
 def fetch_all_sources() -> List[ContentItem]:
     """从所有数据源获取内容"""
     all_items = []
-    
+
+    sources = [
+        ("hackernews", "Hacker News", lambda: HackerNewsFetcher().fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
+        ("producthunt", "Product Hunt", lambda: ProductHuntFetcher(token=config.PRODUCTHUNT_TOKEN).fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
+        ("github_trending", "GitHub Trending", lambda: GitHubTrendingFetcher().fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
+        ("reddit", "Reddit", lambda: RedditFetcher(subreddits=config.REDDIT_SUBREDDITS).fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
+        ("rss_feeds", "RSS 订阅", lambda: RSSFetcher(feeds=config.RSS_FEEDS).fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
+        ("aihot", "AIHOT 精选", lambda: AIHotFetcher().fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
+        ("arxiv", "ArXiv 论文", lambda: ArxivFetcher(categories=config.ARXIV_CATEGORIES).fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
+    ]
+
+    enabled = [s for s in sources if s[0] in config.ENABLED_SOURCES]
+    total = len(enabled)
+
     print("=" * 50)
     print("📡 开始获取各平台数据...")
     print("=" * 50)
-    
-    # Hacker News
-    if "hackernews" in config.ENABLED_SOURCES:
-        print("\n[1/5] 获取 Hacker News...")
-        fetcher = HackerNewsFetcher()
-        items = fetcher.fetch(limit=config.MAX_ITEMS_PER_SOURCE)
+
+    for idx, (key, name, fetch_fn) in enumerate(enabled, 1):
+        print(f"\n[{idx}/{total}] 获取 {name}...")
+        items = fetch_fn()
         print(f"      获取到 {len(items)} 条")
         all_items.extend(items)
-    
-    # Product Hunt
-    if "producthunt" in config.ENABLED_SOURCES:
-        print("\n[2/5] 获取 Product Hunt...")
-        fetcher = ProductHuntFetcher(token=config.PRODUCTHUNT_TOKEN)
-        items = fetcher.fetch(limit=config.MAX_ITEMS_PER_SOURCE)
-        print(f"      获取到 {len(items)} 条")
-        all_items.extend(items)
-    
-    # GitHub Trending
-    if "github_trending" in config.ENABLED_SOURCES:
-        print("\n[3/5] 获取 GitHub Trending...")
-        fetcher = GitHubTrendingFetcher()
-        items = fetcher.fetch(limit=config.MAX_ITEMS_PER_SOURCE)
-        print(f"      获取到 {len(items)} 条")
-        all_items.extend(items)
-    
-    # Reddit
-    if "reddit" in config.ENABLED_SOURCES:
-        print("\n[4/5] 获取 Reddit...")
-        fetcher = RedditFetcher(subreddits=config.REDDIT_SUBREDDITS)
-        items = fetcher.fetch(limit=config.MAX_ITEMS_PER_SOURCE)
-        print(f"      获取到 {len(items)} 条")
-        all_items.extend(items)
-    
-    # RSS Feeds
-    if "rss_feeds" in config.ENABLED_SOURCES:
-        print("\n[5/5] 获取 RSS 订阅...")
-        fetcher = RSSFetcher(feeds=config.RSS_FEEDS)
-        items = fetcher.fetch(limit=config.MAX_ITEMS_PER_SOURCE)
-        print(f"      获取到 {len(items)} 条")
-        all_items.extend(items)
-    
+
     print(f"\n📊 总共获取 {len(all_items)} 条内容")
     return all_items
 
@@ -213,7 +195,12 @@ def main():
         # 6. 打印结果
         print_results(top_items)
 
-        # 7. 推送到飞书
+        # 7. 生成 RSS Feed
+        rss_path = generate_rss_feed(top_items, output_dir=config.RSS_OUTPUT_DIR)
+        if rss_path:
+            print(f"\n📡 RSS Feed 已生成: {rss_path}")
+
+        # 8. 推送到飞书
         if not args.no_push and not args.dry_run:
             push_to_feishu(top_items)
         else:
