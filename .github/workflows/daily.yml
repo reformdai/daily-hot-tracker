@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
   run:
@@ -39,9 +37,8 @@ jobs:
           PRODUCTHUNT_TOKEN: ${{ secrets.PRODUCTHUNT_TOKEN }}
           AIHOT_API_KEY: ${{ secrets.AIHOT_API_KEY }}
           AI_PROVIDER: ${{ vars.AI_PROVIDER || 'deepseek' }}
-          RSS_OUTPUT_DIR: output
         run: |
-          python main.py
+          python main.py --no-rss
 
       - name: Upload logs
         if: always()
@@ -50,20 +47,3 @@ jobs:
           name: logs
           path: logs/
           retention-days: 7
-
-      - name: Deploy RSS to GitHub Pages
-        if: success()
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: output/
-
-  deploy-pages:
-    needs: run
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

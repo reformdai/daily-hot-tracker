@@ -139,6 +139,7 @@ def main():
     parser = argparse.ArgumentParser(description="每日热榜聚合器")
     parser.add_argument("--no-ai", action="store_true", help="跳过 AI 评分")
     parser.add_argument("--no-push", action="store_true", help="跳过飞书推送")
+    parser.add_argument("--no-rss", action="store_true", help="跳过 RSS Feed 生成")
     parser.add_argument("--dry-run", action="store_true", help="仅测试，不推送")
     parser.add_argument("--limit", type=int, default=10, help="最终保留条数")
     args = parser.parse_args()
@@ -196,9 +197,12 @@ def main():
         print_results(top_items)
 
         # 7. 生成 RSS Feed
-        rss_path = generate_rss_feed(top_items, output_dir=config.RSS_OUTPUT_DIR)
-        if rss_path:
-            print(f"\n📡 RSS Feed 已生成: {rss_path}")
+        if args.no_rss:
+            print("\n⏭️  跳过 RSS Feed 生成")
+        else:
+            rss_path = generate_rss_feed(top_items, output_dir=config.RSS_OUTPUT_DIR)
+            if rss_path:
+                print(f"\n📡 RSS Feed 已生成: {rss_path}")
 
         # 8. 推送到飞书
         if not args.no_push and not args.dry_run:
