@@ -6,7 +6,7 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import List
-from .base import BaseFetcher, ContentItem
+from .base import BaseFetcher, ContentItem, stable_id
 
 
 class ArxivFetcher(BaseFetcher):
@@ -96,7 +96,7 @@ class ArxivFetcher(BaseFetcher):
                     categories.append(term)
 
             items.append(ContentItem(
-                id=f"arxiv_{hash(link)}",
+                id=stable_id("arxiv", entry.findtext("atom:id", "", ns) or link),
                 title=title,
                 url=link,
                 source="ArXiv",

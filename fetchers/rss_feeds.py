@@ -1,10 +1,9 @@
 """
 RSS 订阅源抓取
 """
-import feedparser
 from datetime import datetime
 from typing import List, Dict
-from .base import BaseFetcher, ContentItem
+from .base import BaseFetcher, ContentItem, entry_time, fetch_feed, stable_id
 
 
 class RSSFetcher(BaseFetcher):
@@ -38,26 +37,17 @@ class RSSFetcher(BaseFetcher):
     def _fetch_feed(self, feed_config: Dict) -> List[ContentItem]:
         """获取单个 RSS 源"""
         items = []
-        
+
         try:
-            feed = feedparser.parse(feed_config["url"])
+            feed = fetch_feed(feed_config["url"], f"RSS {feed_config.get('name', feed_config['url'])}")
+            if feed is None:
+                return []
             feed_name = feed_config.get("name", feed.feed.get("title", "Unknown"))
             category = feed_config.get("category", "News")
-            
+
             for entry in feed.entries[:10]:  # 每个源最多取 10 条
-                # 解析发布时间
-                published_at = None
-                if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                    try:
-                        published_at = datetime(*entry.published_parsed[:6])
-                    except:
-                        pass
-                elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
-                    try:
-                        published_at = datetime(*entry.updated_parsed[:6])
-                    except:
-                        pass
-                
+                published_at = entry_time(entry)
+
                 # 获取摘要
                 description = ""
                 if hasattr(entry, 'summary'):
@@ -76,7 +66,7 @@ class RSSFetcher(BaseFetcher):
                     author = entry.authors[0].get('name', '')
                 
                 items.append(ContentItem(
-                    id=f"rss_{hash(entry.link)}",
+                    id=stable_id("rss", entry.get("id") or entry.get("link", "")),
                     title=entry.get("title", ""),
                     url=entry.get("link", ""),
                     source=feed_name,

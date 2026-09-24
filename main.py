@@ -102,12 +102,12 @@ def ai_score_and_rank(items: List[ContentItem]) -> List[ContentItem]:
 
 
 def push_to_feishu(items: List[ContentItem]) -> bool:
-    """推送到飞书"""
+    """推送到飞书。仅当已配置的 Webhook 推送失败时返回 False，未配置视为跳过"""
     print("\n📤 推送到飞书...")
-    
+
     if not config.FEISHU_WEBHOOK_URL:
         print("   ⚠️  飞书 Webhook 未配置，跳过推送")
-        return False
+        return True
     
     bot = FeishuBot()
     success = bot.send_daily_digest(items)
@@ -206,7 +206,8 @@ def main():
 
         # 8. 推送到飞书
         if not args.no_push and not args.dry_run:
-            push_to_feishu(top_items)
+            if not push_to_feishu(top_items):
+                return 1
         else:
             print("\n⏭️  跳过飞书推送")
         

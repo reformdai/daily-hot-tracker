@@ -6,7 +6,7 @@ AIHOT (aihot.virxact.com) 数据源
 import requests
 from datetime import datetime
 from typing import List
-from .base import BaseFetcher, ContentItem
+from .base import BaseFetcher, ContentItem, stable_id
 
 
 class AIHotFetcher(BaseFetcher):
@@ -22,6 +22,9 @@ class AIHotFetcher(BaseFetcher):
         "paper": "论文研究",
         "tip": "技巧与观点",
         "insight": "技巧与观点",
+        # 2026-09-24 实测线上返回的分类名
+        "ai-models": "模型发布",
+        "ai-products": "产品发布",
     }
 
     def __init__(self, api_key: str = ""):
@@ -56,6 +59,7 @@ class AIHotFetcher(BaseFetcher):
 
             raw_items = data.get("items", []) if isinstance(data, dict) else data
             items = []
+            unknown_categories = set()
             for raw in raw_items[:limit]:
                 published_at = None
                 pub_str = raw.get("publishedAt") or raw.get("published_at")
@@ -69,9 +73,14 @@ class AIHotFetcher(BaseFetcher):
 
                 cat_key = raw.get("category", "")
                 category = self.CATEGORY_MAP.get(cat_key, "行业动态")
+                if cat_key and cat_key not in self.CATEGORY_MAP:
+                    unknown_categories.add(cat_key)
 
                 items.append(ContentItem(
-                    id=f"aihot_{raw.get('id', hash(raw.get('title', '')))}",
+                    id=(
+                        f"aihot_{raw['id']}" if raw.get("id")
+                        else stable_id("aihot", raw.get("url") or raw.get("title", ""))
+                    ),
                     title=raw.get("title", ""),
                     url=raw.get("url", ""),
                     source="AIHOT",
@@ -86,6 +95,8 @@ class AIHotFetcher(BaseFetcher):
                     },
                 ))
 
+            if unknown_categories:
+                print(f"[AIHOT] unknown categories mapped to 行业动态: {sorted(unknown_categories)}")
             return items
 
         except requests.exceptions.ConnectionError:

@@ -1,10 +1,12 @@
 """
 Reddit 数据抓取 (通过 RSS)
 """
-import feedparser
-from datetime import datetime
+import re
 from typing import List
-from .base import BaseFetcher, ContentItem
+
+from bs4 import BeautifulSoup
+
+from .base import BaseFetcher, ContentItem, entry_time, fetch_feed
 
 
 class RedditFetcher(BaseFetcher):
@@ -22,49 +24,32 @@ class RedditFetcher(BaseFetcher):
     
     def fetch(self, limit: int = 20) -> List[ContentItem]:
         """获取多个 subreddit 的热帖"""
-        all_items = []
         per_sub_limit = max(5, limit // len(self.subreddits))
-        
-        for subreddit in self.subreddits:
-            items = self._fetch_subreddit_rss(subreddit, per_sub_limit)
-            all_items.extend(items)
-        
-        # 按分数排序 (RSS里没有分数，只能按时间或默认顺序)
-        # 通常 RSS 也是按热度排序的 (hot.rss)
+        per_sub = [self._fetch_subreddit_rss(s, per_sub_limit) for s in self.subreddits]
+
+        # 轮询合并各 subreddit（各自保持 hot.rss 原顺序），避免截断总是丢掉靠后的社区
+        all_items = []
+        for rank in range(per_sub_limit):
+            all_items.extend(items[rank] for items in per_sub if rank < len(items))
         return all_items[:limit]
-    
+
     def _fetch_subreddit_rss(self, subreddit: str, limit: int) -> List[ContentItem]:
         """通过 RSS 获取单个 subreddit 的热帖"""
         items = []
         url = f"https://www.reddit.com/r/{subreddit}/hot.rss"
-        
+
         try:
             # 使用浏览器 UA
-            feed = feedparser.parse(
-                url,
-                agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-            )
-            
+            feed = fetch_feed(url, f"Reddit r/{subreddit}", headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            })
+            if feed is None:
+                return []
+
             for entry in feed.entries[:limit]:
-                # 尝试从 entry 中提取更多信息
-                # RSS entry 通常包含: title, link, updated, summary, author
-                
-                # 处理时间
-                published_at = None
-                if hasattr(entry, "published_parsed"):
-                    try:
-                        published_at = datetime(*entry.published_parsed[:6])
-                    except:
-                        pass
-                
-                # 尝试从 summary 中提取一些文本作为 description
-                # Reddit RSS 的 summary 是 HTML，包含预览图等，直接用可能太乱
-                # 简单清洗一下或者截取
-                description = entry.summary if hasattr(entry, "summary") else ""
-                if "<" in description:
-                    # 简单去除 HTML 标签 (或者只取前一部分)
-                    # 这里为了简单，暂不引入 BeautifulSoup，直接截取
-                    pass 
+                # Atom 条目通常只有 updated，没有 published
+                published_at = entry_time(entry)
+                description = self._clean_summary(entry.get("summary", ""))
 
                 items.append(ContentItem(
                     id=f"reddit_{entry.id if hasattr(entry, 'id') else entry.link}",
@@ -87,3 +72,10 @@ class RedditFetcher(BaseFetcher):
         except Exception as e:
             print(f"[Reddit] Error fetching r/{subreddit}: {e}")
             return []
+
+    @staticmethod
+    def _clean_summary(html: str) -> str:
+        """Reddit summary 是 HTML（预览图、表格、submitted by 链接），只保留正文文本"""
+        text = BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
+        text = re.sub(r"\s+", " ", text)
+        return re.split(r"\s*submitted by /u/", text)[0].strip()

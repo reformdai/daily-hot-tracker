@@ -125,12 +125,14 @@ REDDIT_SUBREDDITS = [
 ]
 
 # RSS 订阅源
+# 2026-09-24 实测：a16z、First Round Review、Anthropic 的地址返回 404，尚无等价官方 feed，
+# 暂保留，运行时会打印 "HTTP 404, not retrying"；Y Combinator、VentureBeat 更新较慢，会打印 stale 警告。
 RSS_FEEDS: List[Dict] = [
     {"name": "TechCrunch AI", "url": "https://techcrunch.com/category/artificial-intelligence/feed/", "category": "AI"},
     {"name": "a16z", "url": "https://a16z.com/feed/", "category": "VC"},
     {"name": "Y Combinator", "url": "https://www.ycombinator.com/blog/rss/", "category": "Startup"},
     {"name": "First Round Review", "url": "https://review.firstround.com/feed.xml", "category": "Startup"},
-    {"name": "OpenAI Blog", "url": "https://openai.com/blog/rss/", "category": "AI"},
+    {"name": "OpenAI Blog", "url": "https://openai.com/news/rss.xml", "category": "AI"},
     {"name": "Anthropic", "url": "https://www.anthropic.com/feed.xml", "category": "AI"},
     {"name": "Hugging Face Blog", "url": "https://huggingface.co/blog/feed.xml", "category": "AI"},
     {"name": "The Verge AI", "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", "category": "AI"},
