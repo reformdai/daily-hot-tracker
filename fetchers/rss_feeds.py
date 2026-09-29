@@ -2,7 +2,9 @@
 RSS 订阅源抓取
 """
 from datetime import datetime
+from itertools import zip_longest
 from typing import List, Dict
+from .list_sources import clean_text, http_url
 from .base import BaseFetcher, ContentItem, entry_time, fetch_feed, stable_id
 
 
@@ -20,20 +22,18 @@ class RSSFetcher(BaseFetcher):
     
     def fetch(self, limit: int = 20) -> List[ContentItem]:
         """获取所有 RSS 源的最新内容"""
-        all_items = []
-        
+        if limit <= 0:
+            return []
+        batches = []
         for feed_config in self.feeds:
+            if feed_config.get("enabled", True) is False:
+                continue
             items = self._fetch_feed(feed_config)
-            all_items.extend(items)
-        
-        # 按发布时间排序
-        all_items.sort(
-            key=lambda x: x.published_at or datetime.min, 
-            reverse=True
-        )
-        
-        return all_items[:limit]
-    
+            items.sort(key=lambda item: item.published_at or datetime.min, reverse=True)
+            batches.append(items)
+        # 在单源最新优先的基础上轮询取样，避免高频源占满总额度。
+        return [item for row in zip_longest(*batches) for item in row if item is not None][:limit]
+
     def _fetch_feed(self, feed_config: Dict) -> List[ContentItem]:
         """获取单个 RSS 源"""
         items = []
@@ -45,7 +45,13 @@ class RSSFetcher(BaseFetcher):
             feed_name = feed_config.get("name", feed.feed.get("title", "Unknown"))
             category = feed_config.get("category", "News")
 
-            for entry in feed.entries[:10]:  # 每个源最多取 10 条
+            seen = set()
+            for entry in feed.entries:
+                title = clean_text(entry.get("title", ""))
+                url = http_url(entry.get("link", ""), feed_config["url"])
+                if not title or not url or url in seen:
+                    continue
+                seen.add(url)
                 published_at = entry_time(entry)
 
                 # 获取摘要
@@ -67,8 +73,8 @@ class RSSFetcher(BaseFetcher):
                 
                 items.append(ContentItem(
                     id=stable_id("rss", entry.get("id") or entry.get("link", "")),
-                    title=entry.get("title", ""),
-                    url=entry.get("link", ""),
+                    title=title,
+                    url=url,
                     source=feed_name,
                     category=category,
                     description=description,
@@ -86,10 +92,5 @@ class RSSFetcher(BaseFetcher):
             return []
     
     def _clean_html(self, html: str) -> str:
-        """简单清理 HTML 标签"""
-        import re
-        # 移除 HTML 标签
-        text = re.sub(r'<[^>]+>', '', html)
-        # 移除多余空白
-        text = re.sub(r'\s+', ' ', text)
-        return text.strip()
+        """解码实体并清理标签、脚本和空白。"""
+        return clean_text(html)

@@ -83,5 +83,18 @@ class MainDeliveryTest(OfflineTestCase):
                 post.assert_not_called()
 
 
+class SourceIntegrationTest(OfflineTestCase):
+    def test_new_adapters_enter_pipeline_after_other_source_failure(self):
+        item = main.ContentItem(id="web_a", title="AI release", url="https://example.com/a", source="Anthropic")
+        with mock.patch.object(main.config, "ENABLED_SOURCES", ["hackernews", "web_list", "json_list"]), \
+                mock.patch.object(main.HackerNewsFetcher, "fetch", side_effect=RuntimeError("broken")), \
+                mock.patch.object(main.WebListFetcher, "fetch", return_value=[item]) as web, \
+                mock.patch.object(main.JsonListFetcher, "fetch", return_value=[]) as api, \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main.fetch_all_sources(), [item])
+        web.assert_called_once_with(limit=main.config.MAX_ITEMS_PER_SOURCE)
+        api.assert_called_once_with(limit=main.config.MAX_ITEMS_PER_SOURCE)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,8 @@ from fetchers import (
     GitHubTrendingFetcher,
     RedditFetcher,
     RSSFetcher,
+    WebListFetcher,
+    JsonListFetcher,
     AIHotFetcher,
     ArxivFetcher,
 )
@@ -42,6 +44,8 @@ def fetch_all_sources() -> List[ContentItem]:
         ("github_trending", "GitHub Trending", lambda: GitHubTrendingFetcher().fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
         ("reddit", "Reddit", lambda: RedditFetcher(subreddits=config.REDDIT_SUBREDDITS).fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
         ("rss_feeds", "RSS 订阅", lambda: RSSFetcher(feeds=config.RSS_FEEDS).fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
+        ("web_list", "网页列表", lambda: WebListFetcher(config.WEB_SOURCES).fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
+        ("json_list", "JSON 列表", lambda: JsonListFetcher(config.JSON_SOURCES).fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
         ("aihot", "AIHOT 精选", lambda: AIHotFetcher().fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
         ("arxiv", "ArXiv 论文", lambda: ArxivFetcher(categories=config.ARXIV_CATEGORIES).fetch(limit=config.MAX_ITEMS_PER_SOURCE)),
     ]
@@ -55,7 +59,11 @@ def fetch_all_sources() -> List[ContentItem]:
 
     for idx, (key, name, fetch_fn) in enumerate(enabled, 1):
         print(f"\n[{idx}/{total}] 获取 {name}...")
-        items = fetch_fn()
+        try:
+            items = fetch_fn()
+        except Exception as exc:
+            print(f"      {name} 获取失败 ({type(exc).__name__})，继续其他来源")
+            continue
         print(f"      获取到 {len(items)} 条")
         all_items.extend(items)
 

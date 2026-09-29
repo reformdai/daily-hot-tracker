@@ -14,14 +14,15 @@ A daily AI news digest generator. It collects AI-related trending items from Hac
 
 ## ✨ Features
 
-- **🔥 Seven sources**
+- **🔥 Multi-source collection**
   - **Hacker News** (title only; no description is available)
   - **GitHub Trending**
   - **Product Hunt** (official API with a token; otherwise only the "Top Products Launching Today" section of the public homepage)
   - **Reddit** (r/LocalLLaMA, r/MachineLearning, etc.)
   - **ArXiv** (cs.AI, cs.CL, cs.LG, cs.CV)
   - **AIHOT** (public API, no key needed)
-  - **Tech blogs** via RSS: OpenAI, Anthropic, Hugging Face, a16z, TechCrunch and others
+  - **Tech blogs** via RSS: OpenAI, Google DeepMind, Google Research, Hugging Face, TechCrunch and others
+  - **Web / JSON lists**: Anthropic news via configurable HTML selectors; public JSON GET adapters available
 
 - **🧠 AI processing**
   - **Keyword prefilter**: after keyword filtering, the top 25 items by combined popularity are sent to the model
@@ -130,18 +131,18 @@ In `config.py`:
 
 - `AI_MODELS`: model name and endpoint per provider
 - `KEYWORDS`: prefilter keywords (AI, LLM, agent, RAG, etc.)
-- `ENABLED_SOURCES` / `RSS_FEEDS` / `REDDIT_SUBREDDITS` / `ARXIV_CATEGORIES`: sources
+- `ENABLED_SOURCES` / `RSS_FEEDS` / `WEB_SOURCES` / `JSON_SOURCES` / `REDDIT_SUBREDDITS` / `ARXIV_CATEGORIES`: sources
 - `TOP_N_ITEMS`: config default for items kept per day (10). Note: the CLI `--limit` option also defaults to 10 and always overrides this value at runtime, so editing `TOP_N_ITEMS` alone has no effect; use `python main.py --limit N` instead (for GitHub Actions, add it to the run command in the workflow)
 - `MIN_SCORE_THRESHOLD`: minimum AI score (default 6)
 
 ## 🩺 Source diagnostics
 
-RSS and Reddit requests use explicit timeouts (5 s connect, 20 s read). HTTP 429/500/502/503/504 and network errors are retried at most twice, honoring `Retry-After`, within a 10-second wait budget per URL; other statuses such as 403/404 are not retried. Each feed logs one line, for example:
+RSS, Reddit and the new web/JSON list adapters use explicit timeouts (5 s connect, 20 s read). HTTP 429/500/502/503/504 and network errors are retried at most twice, honoring `Retry-After`, within a 10-second wait budget per URL; other statuses such as 403/404 are not retried. Each feed logs one line, for example:
 
 ```text
 [RSS OpenAI Blog] 1229 entries, latest 2026-09-23 17:00 UTC
 [RSS Y Combinator] 15 entries, latest 2026-06-16 16:00 UTC (stale: no update in 7+ days)
-[RSS a16z] HTTP 404, not retrying; check https://a16z.com/feed/
+[RSS Example] HTTP 404, not retrying; check https://example.com/feed/
 [Reddit r/SaaS] HTTP 429, retry wait 60s exceeds 10s budget, skipping
 [RSS Example] invalid feed (text/html): not an RSS/Atom document
 [RSS Example] valid feed with 0 entries
@@ -153,7 +154,7 @@ Product Hunt logs API HTTP status and GraphQL error messages (a configured token
 
 - AI-generated titles and summaries, plus section names, the Feishu card and RSS metadata, are Chinese only; original source titles and text may stay in their original language (especially with `--no-ai` or AI fallback).
 - Source page or API changes may temporarily leave a source empty; the console log states why (see below).
-- As of 2026-09-24 the configured a16z, First Round Review and Anthropic feeds return 404 and no equivalent official feed has been verified. They stay enabled and log `HTTP 404, not retrying` each run. Y Combinator and VentureBeat update infrequently and may log a stale warning.
+- As of 2026-09-29 a16z and First Round Review feeds still return 404 and are disabled in config. Anthropic now uses its official news HTML list. Google DeepMind and Google Research RSS feeds were verified and added. Y Combinator and VentureBeat update infrequently and may log a stale warning.
 - Product Hunt: prefer the official API when you have a token; the token path was not tested with a real token in this round. The public-page fallback depends on the current homepage markup and can be blocked by bot challenges; it provides no launch time. The API query orders by votes without a date filter, so whether it returns today's launches has not been verified.
 - Reddit RSS is often rate limited (HTTP 429). Long `Retry-After` values are skipped rather than waited out, so some communities may be missing from a run.
 - Timestamps are not yet normalized across sources (some are UTC, some local time), and there is no hard freshness cutoff: old feed entries stay eligible and are only flagged in the log.
@@ -182,3 +183,14 @@ venv/bin/python -m unittest discover -s tests -t .
 MIT License
 
 Note: the repository does not yet include a standalone LICENSE file.
+
+## Adding and probing sources
+
+See [data source adapters and AIHOT study](docs/data-sources.md) for RSS, HTML selectors, JSON field mapping, limitations and the implementation rationale. RSS feeds now sample each source in turn (newest first within each feed) to prevent one busy feed from filling the shared limit.
+
+```bash
+venv/bin/python probe_sources.py web_list --name Anthropic --limit 3
+venv/bin/python probe_sources.py rss --name 'Google DeepMind' --limit 3
+```
+
+This probe does not load `.env`, call an AI model, push messages or write output feeds. `JSON_SOURCES` is empty by default.

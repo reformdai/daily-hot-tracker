@@ -10,14 +10,15 @@
 
 ## ✨ 核心功能
 
-- **🔥 多源热点聚合（7 大数据源）**
+- **🔥 多源热点聚合**
   - **Hacker News**: 科技圈最硬核的讨论（该来源没有描述，只有标题）
   - **GitHub Trending**: 今日增长最快的开源项目
   - **Product Hunt**: 每日最佳新产品（有 Token 时走官方 API；否则只抓取公开首页的「今日」榜单区域）
   - **Reddit**: 热门社区讨论 (r/LocalLLaMA, r/MachineLearning 等)
   - **ArXiv**: AI/ML 领域最新论文 (cs.AI, cs.CL, cs.LG, cs.CV)
   - **AIHOT**: AIHOT 平台精选热点（公开 API，无需 Key）
-  - **Tech Blog**: OpenAI, Anthropic, Hugging Face, a16z, TechCrunch 等 RSS 订阅
+  - **Tech Blog**: OpenAI、Google DeepMind、Google Research、Hugging Face、TechCrunch 等 RSS 订阅
+  - **网页 / JSON 列表**: Anthropic 官网新闻，以及可配置字段映射的公开 JSON GET 接口
 
 - **🧠 AI 智能处理**
   - **关键词预筛选**: 按关键词过滤后，取综合热度前 25 条交给 AI
@@ -133,18 +134,18 @@
 
 - `AI_MODELS`: 各提供商使用的模型和接口地址
 - `KEYWORDS`: 预筛选关键词（默认包含 AI、LLM、agent、RAG 等）
-- `ENABLED_SOURCES` / `RSS_FEEDS` / `REDDIT_SUBREDDITS` / `ARXIV_CATEGORIES`: 数据源
+- `ENABLED_SOURCES` / `RSS_FEEDS` / `WEB_SOURCES` / `JSON_SOURCES` / `REDDIT_SUBREDDITS` / `ARXIV_CATEGORIES`: 数据源
 - `TOP_N_ITEMS`: 每天保留条数的配置默认值（10）。注意：命令行 `--limit` 默认值也是 10，且运行时总会覆盖该配置，因此只修改 `TOP_N_ITEMS` 不会生效；请使用 `python main.py --limit N` 调整条数（GitHub Actions 中需在 workflow 的运行命令里加上该参数）
 - `MIN_SCORE_THRESHOLD`: AI 评分阈值（默认 6）
 
 ## 🩺 数据源诊断
 
-RSS 和 Reddit 请求使用显式超时（连接 5 秒、读取 20 秒）。HTTP 429/500/502/503/504 和网络错误最多重试 2 次，遵循 `Retry-After`，每个 URL 的等待总预算为 10 秒；403/404 等其他状态不重试。每个 feed 输出一行日志，例如：
+RSS、Reddit 和新增网页/JSON 列表请求使用显式超时（连接 5 秒、读取 20 秒）。HTTP 429/500/502/503/504 和网络错误最多重试 2 次，遵循 `Retry-After`，每个 URL 的等待总预算为 10 秒；403/404 等其他状态不重试。每个 feed 输出一行日志，例如：
 
 ```text
 [RSS OpenAI Blog] 1229 entries, latest 2026-09-23 17:00 UTC
 [RSS Y Combinator] 15 entries, latest 2026-06-16 16:00 UTC (stale: no update in 7+ days)
-[RSS a16z] HTTP 404, not retrying; check https://a16z.com/feed/
+[RSS Example] HTTP 404, not retrying; check https://example.com/feed/
 [Reddit r/SaaS] HTTP 429, retry wait 60s exceeds 10s budget, skipping
 [RSS Example] invalid feed (text/html): not an RSS/Atom document
 [RSS Example] valid feed with 0 entries
@@ -156,7 +157,7 @@ Product Hunt 会输出 API 的 HTTP 状态码和 GraphQL 错误信息（服务�
 
 - AI 生成的标题、简讯，以及版块名、飞书卡片和 RSS 的固定文案均为中文，暂不支持其他输出语言；原始来源标题和文本可能保留原语言（尤其在 `--no-ai` 或 AI 失败回退时）。
 - 各数据源的页面结构或接口变化可能导致某个来源暂时抓不到内容；控制台日志会说明原因（见上节）。
-- 截至 2026-09-24，已配置的 a16z、First Round Review、Anthropic 订阅地址返回 404，尚未找到等价的官方 feed。它们仍保持启用，每次运行输出 `HTTP 404, not retrying`。Y Combinator、VentureBeat 更新较慢，可能输出 stale 警告。
+- 截至 2026-09-29，a16z、First Round Review 订阅地址仍返回 404，已保留配置并停用。Anthropic 已改用官网新闻列表；新增并验证 Google DeepMind、Google Research 官方 RSS。Y Combinator、VentureBeat 更新较慢，可能输出 stale 警告。
 - Product Hunt：有 Token 时优先使用官方 API，但本次未使用真实 Token 验证该路径。公开页面兜底依赖当前首页结构，可能被机器人验证拦截，且拿不到发布时间。API 查询按票数排序、未加日期过滤，是否返回当日新品尚未验证。
 - Reddit RSS 经常被限流（HTTP 429）。`Retry-After` 过长时直接跳过而不等待，因此单次运行可能缺少部分社区。
 - 各来源的时间戳尚未统一时区（有的是 UTC，有的是本地时间），也没有硬性的时效截止：旧条目仍可能入选，只会在日志中标记。
@@ -185,3 +186,14 @@ venv/bin/python -m unittest discover -s tests -t .
 MIT License
 
 注：仓库目前尚未包含独立的 LICENSE 文件。
+
+## 新增与试抓信源
+
+见[数据源接入与 AIHOT 借鉴](docs/data-sources.md)：包含 RSS、网页选择器、JSON 字段映射、接入边界与研究结论。RSS 改为各源最新优先、按源轮询取样，减少高频源占满总额度的情况。
+
+```bash
+venv/bin/python probe_sources.py web_list --name Anthropic --limit 3
+venv/bin/python probe_sources.py rss --name 'Google DeepMind' --limit 3
+```
+
+试抓不加载 `.env`、不调用 AI、不推送、不生成 RSS 文件。`JSON_SOURCES` 默认留空。

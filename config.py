@@ -110,6 +110,8 @@ ENABLED_SOURCES = [
     "github_trending",
     "reddit",
     "rss_feeds",
+    "web_list",
+    "json_list",
     "aihot",
     "arxiv",
 ]
@@ -125,20 +127,36 @@ REDDIT_SUBREDDITS = [
 ]
 
 # RSS 订阅源
-# 2026-09-24 实测：a16z、First Round Review、Anthropic 的地址返回 404，尚无等价官方 feed，
-# 暂保留，运行时会打印 "HTTP 404, not retrying"；Y Combinator、VentureBeat 更新较慢，会打印 stale 警告。
+# 2026-09-29：404 源保留配置但停用；Anthropic 改用下方 WEB_SOURCES。
+# 单源按最新排序后轮询取样；Y Combinator、VentureBeat 更新较慢，会打印 stale 警告。
 RSS_FEEDS: List[Dict] = [
     {"name": "TechCrunch AI", "url": "https://techcrunch.com/category/artificial-intelligence/feed/", "category": "AI"},
-    {"name": "a16z", "url": "https://a16z.com/feed/", "category": "VC"},
+    {"name": "a16z", "url": "https://a16z.com/feed/", "category": "VC", "enabled": False},
     {"name": "Y Combinator", "url": "https://www.ycombinator.com/blog/rss/", "category": "Startup"},
-    {"name": "First Round Review", "url": "https://review.firstround.com/feed.xml", "category": "Startup"},
+    {"name": "First Round Review", "url": "https://review.firstround.com/feed.xml", "category": "Startup", "enabled": False},
     {"name": "OpenAI Blog", "url": "https://openai.com/news/rss.xml", "category": "AI"},
-    {"name": "Anthropic", "url": "https://www.anthropic.com/feed.xml", "category": "AI"},
+    {"name": "Google DeepMind", "url": "https://deepmind.google/blog/rss.xml", "category": "AI"},
+    {"name": "Google Research", "url": "https://research.google/blog/rss/", "category": "AI"},
     {"name": "Hugging Face Blog", "url": "https://huggingface.co/blog/feed.xml", "category": "AI"},
     {"name": "The Verge AI", "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", "category": "AI"},
     {"name": "VentureBeat AI", "url": "https://venturebeat.com/category/ai/feed/", "category": "AI"},
     {"name": "MIT Tech Review AI", "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed", "category": "AI"},
 ]
+
+# 无官方 RSS 的站点：选择器来自公开页面，页面改版时需重新试抓。
+WEB_SOURCES: List[Dict] = [
+    {
+        "name": "Anthropic", "url": "https://www.anthropic.com/news", "category": "AI",
+        "item_selector": 'a[href^="/news/"]:has(time)',
+        "title_selector": 'span[class*="__title"]',
+        "date_selector": "time",
+        "allow_url_prefixes": ["https://www.anthropic.com/news/"],
+    },
+]
+
+# 公开 JSON GET 接口，按 docs/data-sources.md 配置字段路径后启用。
+# 默认不添加软件 release 流，避免改变日报主题。
+JSON_SOURCES: List[Dict] = []
 
 # ArXiv 关注的分类
 ARXIV_CATEGORIES = [
