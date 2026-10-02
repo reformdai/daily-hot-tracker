@@ -2,6 +2,7 @@
 Hacker News 数据抓取
 """
 import requests
+from datetime import datetime, timezone
 from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .base import BaseFetcher, ContentItem
@@ -65,6 +66,10 @@ class HackerNewsFetcher(BaseFetcher):
             author=data.get("by", ""),
             score=data.get("score", 0),
             comments=data.get("descendants", 0),
+            published_at=(
+                datetime.fromtimestamp(data["time"], timezone.utc).replace(tzinfo=None)
+                if isinstance(data.get("time"), int) else None
+            ),
             extra={
                 "hn_url": f"https://news.ycombinator.com/item?id={item_id}",
             }

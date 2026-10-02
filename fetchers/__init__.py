@@ -10,6 +10,8 @@ from .rss_feeds import RSSFetcher
 from .list_sources import WebListFetcher, JsonListFetcher
 from .aihot import AIHotFetcher
 from .arxiv import ArxivFetcher
+from .hn_search import HNSearchFetcher
+from .huggingface import HuggingFaceFetcher
 
 __all__ = [
     "BaseFetcher",
@@ -23,4 +25,6 @@ __all__ = [
     "JsonListFetcher",
     "AIHotFetcher",
     "ArxivFetcher",
+    "HNSearchFetcher",
+    "HuggingFaceFetcher",
 ]

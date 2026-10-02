@@ -144,12 +144,14 @@ class FeishuBot:
             for item in cat_items:
                 idx += 1
                 title_text = item.ai_title if item.ai_title else item.title
+                if (item.extra or {}).get("followup"):
+                    title_text = f"🔄 后续 · {title_text}"
                 summary_text = item.ai_summary if item.ai_summary else item.description[:100]
                 source_text = self._format_source(item)
                 content_md = (
                     f"**{idx}. [{title_text}]({item.url})**\n"
                     f"{summary_text}\n"
-                    f"🔗 来源: {source_text} | [查看原文]({item.url})"
+                    f"🔗 来源: {source_text} | [查看原文]({item.url}){self._discussion_link(item)}"
                 )
                 elements.append({
                     "tag": "markdown",
@@ -170,12 +172,14 @@ class FeishuBot:
             for item in cat_items:
                 idx += 1
                 title_text = item.ai_title if item.ai_title else item.title
+                if (item.extra or {}).get("followup"):
+                    title_text = f"🔄 后续 · {title_text}"
                 summary_text = item.ai_summary if item.ai_summary else item.description[:100]
                 source_text = self._format_source(item)
                 content_md = (
                     f"**{idx}. [{title_text}]({item.url})**\n"
                     f"{summary_text}\n"
-                    f"🔗 来源: {source_text} | [查看原文]({item.url})"
+                    f"🔗 来源: {source_text} | [查看原文]({item.url}){self._discussion_link(item)}"
                 )
                 elements.append({
                     "tag": "markdown",
@@ -213,11 +217,24 @@ class FeishuBot:
         return self._send(payload)
     
     def _format_source(self, item: ContentItem) -> str:
-        """格式化来源显示：AIHOT 显示原始信源，其他显示平台名"""
+        """格式化来源显示：AIHOT 显示原始信源，其他显示平台名；多源报道时注明来源数"""
         if item.source == "AIHOT" and item.author:
             # AIHOT 的 author 字段是原始信源（如 "OpenAI：官网动态"、"X：宝玉"）
-            return f"AIHOT · {item.author}"
-        return item.source or "未知"
+            text = f"AIHOT · {item.author}"
+        else:
+            text = item.source or "未知"
+        count = int((item.extra or {}).get("source_count", 1) or 1)
+        if count > 1:
+            text += f"（{count} 个来源报道）"
+        return text
+
+    @staticmethod
+    def _discussion_link(item: ContentItem) -> str:
+        """原文不是 HN 帖子但 HN 上有讨论时，附上讨论链接"""
+        hn_url = (item.extra or {}).get("hn_url")
+        if hn_url and hn_url != item.url:
+            return f" | [HN 讨论]({hn_url})"
+        return ""
 
     def _get_score_emoji(self, score: float) -> str:
         """根据分数返回 emoji"""

@@ -21,6 +21,10 @@ ENV/
 
 # Logs
 *.log
+logs/
+
+# Push history (persisted by actions/cache in CI)
+state/
 
 # Generated output (RSS feed etc.)
 output/

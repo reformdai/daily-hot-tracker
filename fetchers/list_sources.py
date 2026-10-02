@@ -65,7 +65,7 @@ def get_path(value, path):
 
 class ListSourceFetcher(BaseFetcher):
     name = "List Sources"
-    COMMON = {"name", "url", "category", "enabled"}
+    COMMON = {"name", "url", "category", "enabled", "tier"}
     FIELDS = set()
     REQUIRED = {"name", "url"}
     kind = "list"
@@ -110,7 +110,8 @@ class ListSourceFetcher(BaseFetcher):
             id=stable_id(self.kind, url), title=title, url=url,
             source=config["name"], category=config.get("category", "News"),
             description=clean_text(summary)[:500], author=clean_text(author),
-            published_at=parse_date(date), extra={"source_url": config["url"], "source_kind": self.kind},
+            published_at=parse_date(date),
+            extra={"source_url": config["url"], "source_kind": self.kind, **({"tier": config["tier"]} if config.get("tier") else {})},
         )
 
 

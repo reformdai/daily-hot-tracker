@@ -11,19 +11,34 @@
 ## ✨ 核心功能
 
 - **🔥 多源热点聚合**
-  - **Hacker News**: 科技圈最硬核的讨论（该来源没有描述，只有标题）
+  - **Hacker News**: 全站热榜 + Algolia 关键词搜索（最近 24 小时内的高分 AI 讨论，弥补热榜里 AI 内容少的问题）
+  - **Hugging Face**: 每日论文（社区投票 + 摘要）与新近创建的趋势模型
   - **GitHub Trending**: 今日增长最快的开源项目
   - **Product Hunt**: 每日最佳新产品（有 Token 时走官方 API；否则只抓取公开首页的「今日」榜单区域）
   - **Reddit**: 热门社区讨论 (r/LocalLLaMA, r/MachineLearning 等)
   - **ArXiv**: AI/ML 领域最新论文 (cs.AI, cs.CL, cs.LG, cs.CV)
   - **AIHOT**: AIHOT 平台精选热点（公开 API，无需 Key）
-  - **Tech Blog**: OpenAI、Google DeepMind、Google Research、Hugging Face、TechCrunch 等 RSS 订阅
+  - **Tech Blog**: 20 个 RSS 订阅，按信源分级：T1 官方一手（OpenAI、DeepMind、Google Research、Hugging Face、Microsoft Research、NVIDIA、AWS、GitHub、Mistral、BAIR）与 T2 媒体/个人（TechCrunch、The Verge、Ars Technica、MIT TR、The Decoder、Simon Willison、Import AI、Latent Space 等）
   - **网页 / JSON 列表**: Anthropic 官网新闻，以及可配置字段映射的公开 JSON GET 接口
 
+- **🧲 获取与排序（参考 AIHOT）**
+  - **并发抓取 + 信源健康报告**: 各来源并发抓取，日志按来源分组；每次运行在 `logs/` 写入各源状态、耗时与全部候选的排序信号
+  - **跨源合并**: 先按归一化 URL（去追踪参数、arxiv 各版本与 HF Papers 统一）合并，再按标题相似度合并；代表条目优先官方一手信源，并记录被几个独立来源报道
+  - **综合排序分**: 来源内互动分位数（不同平台分数不可直接比）+ 信源分级 + 24 小时半衰的时效 + 多源佐证
+  - **时效窗口**: 默认丢弃最近一次出现已超过 72 小时的内容（榜单类无时间的条目保留）
+  - **候选多样性**: 送 AI 的 40 条候选中，单一来源族（如 Reddit、ArXiv）最多 10 条
+  - **原文补抓**: 对描述不足的候选抓取原文正文（GitHub / HF 模型读 README），可选 Jina Reader 兜底
+
+- **🧠 推送记忆（跨天去重）**
+  - 记住最近 7 天推送过的条目（GitHub Actions 中用 `actions/cache` 在运行之间保存 `state/push_history.json`）
+  - 规则层：URL 相同（含追踪参数、HN 讨论链接等变体）或原标题高度相似的内容在 AI 评分前直接剔除
+  - 语义层：AI 评分时附上近期已推送的标题，判断每条是新事件、已推事件的**实质后续进展**（保留，卡片标注「🔄 后续」），还是换源转述的**重复报道**（剔除）
+  - 只在飞书推送成功后记录；`--dry-run` / `--no-push` 不记录，`--no-memory` 完全忽略记忆
+
 - **🧠 AI 智能处理**
-  - **关键词预筛选**: 按关键词过滤后，取综合热度前 25 条交给 AI
+  - **关键词预筛选**: 英文关键词按词边界匹配（此前 "AI" 会误命中 "said"、"paid"），支持中文关键词；ArXiv、HF、AIHOT 等 AI 垂直源免筛
   - **智能评分**: 1-10 分，保留 6 分以上的 Top 10（GitHub Trending 每天最多 2 条且需 8 分以上）
-  - **中文简讯**: 根据来源提供的标题和描述（批量评分时取描述前 200 字）撰写不超过 140 字的中文简讯。**不会抓取原文全文**；描述很少时（如 Hacker News）简讯也会相应简短
+  - **中文简讯**: 根据标题、来源描述和补抓的原文摘录（批量评分时取前 600 字）撰写不超过 140 字的中文简讯；评分时同时提供信源等级、独立来源数和热度作为重要性参考
   - **5 大版块分类**: 🧠 模型发布 / 🚀 产品发布 / 📊 行业动态 / 📝 论文研究 / 💡 技巧与观点
   - **结果校验**: 模型返回的评分、编号、分类和字段类型会被校验，缺失或不合法的条目单独重试一次，仍失败则丢弃
 
@@ -129,12 +144,20 @@
 | `FEISHU_WEBHOOK_URL` | 可选，飞书机器人 Webhook |
 | `PRODUCTHUNT_TOKEN` | 可选，Product Hunt API Token |
 | `RSS_OUTPUT_DIR` | 可选，RSS 输出目录，默认 `output` |
+| `JINA_READER_FALLBACK` / `JINA_API_KEY` | 可选，原文补抓失败时用 Jina Reader 渲染兜底（`true` 开启；Key 可不填但限流更严） |
+| `MAX_ITEM_AGE_HOURS` | 可选，时效窗口小时数，默认 72；`0` 关闭 |
+| `AI_CANDIDATE_LIMIT` / `MAX_CANDIDATES_PER_FAMILY` | 可选，送 AI 的候选数（默认 40）与单一来源族上限（默认 10） |
+| `LOG_DIR` | 可选，运行日志目录，默认 `logs` |
+| `HISTORY_PATH` / `HISTORY_TTL_DAYS` | 可选，推送记忆文件（默认 `state/push_history.json`）与保留天数（默认 7） |
 
 `config.py` 中可调整：
 
 - `AI_MODELS`: 各提供商使用的模型和接口地址
 - `KEYWORDS`: 预筛选关键词（默认包含 AI、LLM、agent、RAG 等）
-- `ENABLED_SOURCES` / `RSS_FEEDS` / `WEB_SOURCES` / `JSON_SOURCES` / `REDDIT_SUBREDDITS` / `ARXIV_CATEGORIES`: 数据源
+- `ENABLED_SOURCES` / `RSS_FEEDS` / `WEB_SOURCES` / `JSON_SOURCES` / `REDDIT_SUBREDDITS` / `ARXIV_CATEGORIES` / `HN_SEARCH_QUERIES`: 数据源
+- `SOURCE_TIERS` 及各源配置里的 `"tier"`: 信源分级（T1 官方一手 / T2 媒体与精选 / T3 社区与榜单）
+- `KEYWORD_EXEMPT_SOURCES`: 跳过关键词预筛选的 AI 垂直源
+- `SOURCE_ITEM_LIMITS`: 单个来源的条目上限（RSS 默认 60）
 - `TOP_N_ITEMS`: 每天保留条数的配置默认值（10）。注意：命令行 `--limit` 默认值也是 10，且运行时总会覆盖该配置，因此只修改 `TOP_N_ITEMS` 不会生效；请使用 `python main.py --limit N` 调整条数（GitHub Actions 中需在 workflow 的运行命令里加上该参数）
 - `MIN_SCORE_THRESHOLD`: AI 评分阈值（默认 6）
 
@@ -160,9 +183,11 @@ Product Hunt 会输出 API 的 HTTP 状态码和 GraphQL 错误信息（服务�
 - 截至 2026-09-29，a16z、First Round Review 订阅地址仍返回 404，已保留配置并停用。Anthropic 已改用官网新闻列表；新增并验证 Google DeepMind、Google Research 官方 RSS。Y Combinator、VentureBeat 更新较慢，可能输出 stale 警告。
 - Product Hunt：有 Token 时优先使用官方 API，但本次未使用真实 Token 验证该路径。公开页面兜底依赖当前首页结构，可能被机器人验证拦截，且拿不到发布时间。API 查询按票数排序、未加日期过滤，是否返回当日新品尚未验证。
 - Reddit RSS 经常被限流（HTTP 429）。`Retry-After` 过长时直接跳过而不等待，因此单次运行可能缺少部分社区。
-- 各来源的时间戳尚未统一时区（有的是 UTC，有的是本地时间），也没有硬性的时效截止：旧条目仍可能入选，只会在日志中标记。
+- 时效窗口依赖各来源提供的时间；Anthropic 等只有日期的页面按 UTC 零点计算，GitHub Trending、HF 趋势模型等榜单没有发布时间，不受时效窗口约束。
+- 2026-10-02 新增的 RSS 源、HN 搜索与 Hugging Face 接口在开发环境中网络受限，未能实测，只做了离线解析测试；首次运行请查看日志或 `logs/run-*.json` 里的信源状态，失效的源改为 `enabled: False`。
+- 原文补抓只读静态 HTML，不执行 JavaScript；读不到时退回来源描述，不影响流程。补抓会对候选原文站点各发一次请求。
 - 本机网络下的抓取结果不代表 GitHub Actions 运行环境同样可用。
-- workflow 中的 `Upload logs` 步骤上传 `logs/` 目录，但程序目前不会生成该目录，该步骤可能提示未找到文件。
+- 推送记忆依赖 GitHub Actions 缓存：缓存 7 天未使用会被回收，手动删除或回收后会退化为无记忆运行一次。同一事件的「重复还是后续」由模型判断，可能误判，`logs/run-*.json` 中的 `novelty` 字段记录了每条的判断结果。
 
 ## 🧪 测试
 
@@ -194,6 +219,8 @@ MIT License
 ```bash
 venv/bin/python probe_sources.py web_list --name Anthropic --limit 3
 venv/bin/python probe_sources.py rss --name 'Google DeepMind' --limit 3
+venv/bin/python probe_sources.py hn_search --limit 5
+venv/bin/python probe_sources.py huggingface --limit 5 --body   # --body 同时试读原文摘录
 ```
 
 试抓不加载 `.env`、不调用 AI、不推送、不生成 RSS 文件。`JSON_SOURCES` 默认留空。
