@@ -21,6 +21,7 @@ ENV/
 
 # Logs
 *.log
+logs/
 
 # Generated output (RSS feed etc.)
 output/

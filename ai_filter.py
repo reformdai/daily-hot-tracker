@@ -20,6 +20,7 @@ class AIFilter:
 ---
 标题: {title}
 来源: {source}
+信号: {signals}
 描述: {description}
 ---
 
@@ -30,7 +31,8 @@ class AIFilter:
 4. summary: 用中文撰写不超过 140 字的简讯。
 
 事实约束：
-- 只能使用上面提供的标题、来源和描述中的信息，不得编造参数、数据、融资金额、日期等未提供的事实。
+- 只能使用上面提供的标题、来源和描述（含原文摘录）中的信息，不得编造参数、数据、融资金额、日期等未提供的事实。
+- 「信号」只用于判断重要性（官方一手、多个独立来源报道、热度高可适当加分），不要写进简讯。
 - 描述为空或信息很少时，只写一两句基于标题的简短说明，不要为凑字数而推测或扩写。
 
 请回复纯 JSON：
@@ -44,6 +46,8 @@ class AIFilter:
 - 8-10分：行业重大新闻、颠覆性技术、热门开源项目、重要论文 (必须入选)
 - 6-7分：有价值的技术更新、深度观点、实用工具 (值得关注)
 - 1-5分：普通资讯、营销文、无关内容 (不推荐)
+- 「信号」中的官方一手信源、多个独立来源同时报道、社区热度高，说明影响面更大，可适当提高评分；
+  但信号只用于判断重要性，不要写进简讯。
 
 任务要求：
 1. score: 给出评分。
@@ -56,7 +60,7 @@ class AIFilter:
    - 描述中提供了核心参数、技术架构、主要功能、融资数据等硬核信息时优先提炼。
 
 事实约束：
-- 只能使用每条内容提供的标题、来源和描述，不得编造参数、数据、融资金额、日期等未提供的事实。
+- 只能使用每条内容提供的标题、来源和描述（含原文摘录），不得编造参数、数据、融资金额、日期等未提供的事实。
 - 描述为空或信息很少时，只写一两句基于标题的简短说明，不要为凑字数而推测或扩写。
 - 每条内容必须且只能返回一个结果，index 为方括号中的编号。
 
@@ -176,6 +180,33 @@ class AIFilter:
             raise ValueError(f"invalid category: {category!r}")
         return float(score), title_cn.strip(), summary.strip(), category
     
+    TIER_LABELS = {"T1": "官方一手", "T2": "媒体/精选", "T3": "社区/榜单"}
+
+    @classmethod
+    def _signals(cls, item: ContentItem) -> str:
+        """排序阶段得到的客观信号，帮助模型判断影响面"""
+        extra = item.extra or {}
+        parts = []
+        if extra.get("tier") in cls.TIER_LABELS:
+            parts.append(f"信源 {cls.TIER_LABELS[extra['tier']]}")
+        families = extra.get("families") or []
+        if len(families) > 1:
+            parts.append(f"{len(families)} 个独立来源报道 ({', '.join(families[:5])})")
+        if item.score:
+            parts.append(f"热度 {item.score}")
+        if item.comments:
+            parts.append(f"评论 {item.comments}")
+        return " | ".join(parts) or "(无)"
+
+    @staticmethod
+    def _context(item: ContentItem, limit: int) -> str:
+        """源描述 + 补抓的原文摘录，截断到 limit 字符"""
+        description = (item.description or "").strip()
+        body = ((item.extra or {}).get("body") or "").strip()
+        if body and body[:80] not in description:
+            description = f"{description} 【原文摘录】{body}" if description else f"【原文摘录】{body}"
+        return description[:limit] if description else "(无描述)"
+
     def score_single(self, item: ContentItem) -> Tuple[float, str, str, str]:
         """
         对单个内容评分
@@ -186,7 +217,8 @@ class AIFilter:
         prompt = self.SCORE_PROMPT.format(
             title=item.title,
             source=item.source,
-            description=item.description[:500] if item.description else "(无描述)"
+            signals=self._signals(item),
+            description=self._context(item, 1000),
         )
         
         try:
@@ -213,7 +245,8 @@ class AIFilter:
                 items_text += f"""
 [{idx}] 标题: {item.title}
     来源: {item.source}
-    描述: {item.description[:200] if item.description else "(无描述)"}
+    信号: {self._signals(item)}
+    描述: {self._context(item, 600)}
 """
             
             prompt = self.BATCH_PROMPT.format(items_text=items_text)

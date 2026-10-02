@@ -36,6 +36,8 @@ jobs:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           PRODUCTHUNT_TOKEN: ${{ secrets.PRODUCTHUNT_TOKEN }}
           AIHOT_API_KEY: ${{ secrets.AIHOT_API_KEY }}
+          JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+          JINA_READER_FALLBACK: ${{ vars.JINA_READER_FALLBACK || 'false' }}
           AI_PROVIDER: ${{ vars.AI_PROVIDER || 'deepseek' }}
         run: |
           python main.py --no-rss

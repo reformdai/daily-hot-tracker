@@ -82,6 +82,7 @@ class RSSFetcher(BaseFetcher):
                     published_at=published_at,
                     extra={
                         "feed_url": feed_config["url"],
+                        **({"tier": feed_config["tier"]} if feed_config.get("tier") else {}),
                     }
                 ))
             

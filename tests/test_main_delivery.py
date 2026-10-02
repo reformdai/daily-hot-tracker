@@ -15,7 +15,7 @@ with mock.patch("dotenv.load_dotenv"):
 WEBHOOK = "https://example.invalid/feishu-hook"
 
 
-def _items():
+def _items(*_args):
     return [
         main.ContentItem(
             id=f"hn_{i}",
@@ -35,6 +35,7 @@ class MainDeliveryTest(OfflineTestCase):
         for patcher in (
             mock.patch.object(main, "fetch_all_sources", side_effect=_items),
             mock.patch.object(main, "generate_rss_feed", return_value=""),
+            mock.patch.object(main, "write_run_log"),
             mock.patch.object(main.config, "TOP_N_ITEMS", main.config.TOP_N_ITEMS),
         ):
             patcher.start()

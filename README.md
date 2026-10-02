@@ -15,19 +15,28 @@ A daily AI news digest generator. It collects AI-related trending items from Hac
 ## ✨ Features
 
 - **🔥 Multi-source collection**
-  - **Hacker News** (title only; no description is available)
+  - **Hacker News**: front page plus Algolia keyword search (high-scoring AI stories from the last 24 hours, which the front page often misses)
+  - **Hugging Face**: daily papers (community upvotes + abstracts) and recently created trending models
   - **GitHub Trending**
   - **Product Hunt** (official API with a token; otherwise only the "Top Products Launching Today" section of the public homepage)
   - **Reddit** (r/LocalLLaMA, r/MachineLearning, etc.)
   - **ArXiv** (cs.AI, cs.CL, cs.LG, cs.CV)
   - **AIHOT** (public API, no key needed)
-  - **Tech blogs** via RSS: OpenAI, Google DeepMind, Google Research, Hugging Face, TechCrunch and others
+  - **Tech blogs** via 20 RSS feeds, tiered as T1 first-party (OpenAI, DeepMind, Google Research, Hugging Face, Microsoft Research, NVIDIA, AWS, GitHub, Mistral, BAIR) and T2 media/individuals (TechCrunch, The Verge, Ars Technica, MIT TR, The Decoder, Simon Willison, Import AI, Latent Space, etc.)
   - **Web / JSON lists**: Anthropic news via configurable HTML selectors; public JSON GET adapters available
 
+- **🧲 Collection and ranking (inspired by AIHOT)**
+  - **Concurrent fetching + source health report**: sources are fetched concurrently with logs grouped per source; each run writes source status, timing and every candidate's ranking signals to `logs/`
+  - **Cross-source merging**: items merge by canonical URL (tracking params stripped; arXiv versions and HF Papers unified), then by title similarity; the representative item prefers first-party sources and records how many independent sources covered the story
+  - **Rank score**: within-source engagement percentile (platform scores are not comparable) + source tier + 24-hour half-life recency + multi-source corroboration
+  - **Freshness window**: items whose latest sighting is older than 72 hours are dropped by default (undated chart items are kept)
+  - **Candidate diversity**: of the 40 candidates sent to the model, one source family (e.g. Reddit, ArXiv) can take at most 10
+  - **Full-text enrichment**: candidates with thin descriptions get an excerpt of the original page (README for GitHub / HF models), with optional Jina Reader fallback
+
 - **🧠 AI processing**
-  - **Keyword prefilter**: after keyword filtering, the top 25 items by combined popularity are sent to the model
+  - **Keyword prefilter**: English keywords match on word boundaries (previously "AI" matched "said" and "paid"); Chinese keywords supported; AI-native sources (ArXiv, HF, AIHOT) are exempt
   - **Scoring**: 1–10; keeps the top 10 items scoring 6 or higher (at most 2 GitHub Trending items per day, each scoring 8 or higher)
-  - **Summaries**: up to 140 Chinese characters, written from the source-provided title and description (the first 200 characters of the description in batch scoring). **Full article text is not fetched**; when a source provides little text (e.g. Hacker News), summaries are short
+  - **Summaries**: up to 140 Chinese characters, written from the title, source description and the fetched article excerpt (first 600 characters in batch scoring); scoring also sees the source tier, independent-source count and engagement as importance hints
   - **Five sections**: 🧠 模型发布 (models) / 🚀 产品发布 (products) / 📊 行业动态 (industry) / 📝 论文研究 (papers) / 💡 技巧与观点 (tips & opinions)
   - **Output validation**: scores, indexes, categories and field types returned by the model are validated; missing or invalid items are retried once individually and dropped if they still fail
 
@@ -126,12 +135,19 @@ Environment variables (`.env`, or GitHub Secrets / Variables):
 | `FEISHU_WEBHOOK_URL` | Optional Feishu bot webhook |
 | `PRODUCTHUNT_TOKEN` | Optional Product Hunt API token |
 | `RSS_OUTPUT_DIR` | Optional RSS output directory, default `output` |
+| `JINA_READER_FALLBACK` / `JINA_API_KEY` | Optional Jina Reader fallback for full-text enrichment (`true` to enable; key optional but stricter rate limits without it) |
+| `MAX_ITEM_AGE_HOURS` | Optional freshness window in hours, default 72; `0` disables |
+| `AI_CANDIDATE_LIMIT` / `MAX_CANDIDATES_PER_FAMILY` | Optional candidate count sent to the model (default 40) and per-source-family cap (default 10) |
+| `LOG_DIR` | Optional run log directory, default `logs` |
 
 In `config.py`:
 
 - `AI_MODELS`: model name and endpoint per provider
 - `KEYWORDS`: prefilter keywords (AI, LLM, agent, RAG, etc.)
-- `ENABLED_SOURCES` / `RSS_FEEDS` / `WEB_SOURCES` / `JSON_SOURCES` / `REDDIT_SUBREDDITS` / `ARXIV_CATEGORIES`: sources
+- `ENABLED_SOURCES` / `RSS_FEEDS` / `WEB_SOURCES` / `JSON_SOURCES` / `REDDIT_SUBREDDITS` / `ARXIV_CATEGORIES` / `HN_SEARCH_QUERIES`: sources
+- `SOURCE_TIERS` and per-source `"tier"`: T1 first-party / T2 media and curated / T3 community and charts
+- `KEYWORD_EXEMPT_SOURCES`: AI-native sources that skip the keyword prefilter
+- `SOURCE_ITEM_LIMITS`: per-source item caps (RSS defaults to 60)
 - `TOP_N_ITEMS`: config default for items kept per day (10). Note: the CLI `--limit` option also defaults to 10 and always overrides this value at runtime, so editing `TOP_N_ITEMS` alone has no effect; use `python main.py --limit N` instead (for GitHub Actions, add it to the run command in the workflow)
 - `MIN_SCORE_THRESHOLD`: minimum AI score (default 6)
 
@@ -157,9 +173,11 @@ Product Hunt logs API HTTP status and GraphQL error messages (a configured token
 - As of 2026-09-29 a16z and First Round Review feeds still return 404 and are disabled in config. Anthropic now uses its official news HTML list. Google DeepMind and Google Research RSS feeds were verified and added. Y Combinator and VentureBeat update infrequently and may log a stale warning.
 - Product Hunt: prefer the official API when you have a token; the token path was not tested with a real token in this round. The public-page fallback depends on the current homepage markup and can be blocked by bot challenges; it provides no launch time. The API query orders by votes without a date filter, so whether it returns today's launches has not been verified.
 - Reddit RSS is often rate limited (HTTP 429). Long `Retry-After` values are skipped rather than waited out, so some communities may be missing from a run.
-- Timestamps are not yet normalized across sources (some are UTC, some local time), and there is no hard freshness cutoff: old feed entries stay eligible and are only flagged in the log.
+- The freshness window relies on source timestamps; date-only pages such as Anthropic count as UTC midnight, and chart sources without publish times (GitHub Trending, HF trending models) are not subject to it.
+- RSS feeds, HN search and Hugging Face endpoints added on 2026-10-02 could not be fetched live from the development sandbox and are covered by offline parsing tests only; check the first run's log or `logs/run-*.json` and set broken feeds to `enabled: False`.
+- Full-text enrichment reads static HTML only (no JavaScript); when a page cannot be read the source description is used. It makes one request per candidate to the original site.
 - Results from a local network do not guarantee the same behavior on GitHub Actions runners.
-- The workflow's `Upload logs` step uploads a `logs/` directory that the program does not currently create, so the step may report that no files were found.
+- There is no persistent storage, so a story may be picked on two consecutive days (the freshness window and recency decay make this less likely).
 
 ## 🧪 Tests
 
@@ -191,6 +209,8 @@ See [data source adapters and AIHOT study](docs/data-sources.md) for RSS, HTML s
 ```bash
 venv/bin/python probe_sources.py web_list --name Anthropic --limit 3
 venv/bin/python probe_sources.py rss --name 'Google DeepMind' --limit 3
+venv/bin/python probe_sources.py hn_search --limit 5
+venv/bin/python probe_sources.py huggingface --limit 5 --body   # --body also tries the article excerpt
 ```
 
 This probe does not load `.env`, call an AI model, push messages or write output feeds. `JSON_SOURCES` is empty by default.
