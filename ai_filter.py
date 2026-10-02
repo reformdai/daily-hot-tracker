@@ -29,6 +29,17 @@ class AIFilter:
 2. category: 选择一个最匹配的分类 [模型发布, 产品发布, 行业动态, 论文研究, 技巧与观点]。
 3. title_cn: 将标题翻译为信达雅的中文标题。
 4. summary: 用中文撰写不超过 140 字的简讯。
+5. novelty: 对照「近期已推送」列表判断这条内容的新旧：
+   - "new"：列表中没有的新事件。
+   - "followup"：列表中某事件的实质新进展（正式上线、开源、公布新数据或价格、监管/诉讼结论、重大事故等），
+     简讯要直接写清这次的新进展是什么。
+   - "repeat"：列表中已推送事件的跟进报道、评论、转述、换角度解读或二次发布，没有实质新信息。
+   只按事件本身判断，不要因为公司或话题相同就判 repeat。列表为空时一律 "new"。
+
+近期已推送（日期 中文标题）：
+---
+{history}
+---
 
 事实约束：
 - 只能使用上面提供的标题、来源和描述（含原文摘录）中的信息，不得编造参数、数据、融资金额、日期等未提供的事实。
@@ -36,7 +47,7 @@ class AIFilter:
 - 描述为空或信息很少时，只写一两句基于标题的简短说明，不要为凑字数而推测或扩写。
 
 请回复纯 JSON：
-{{"score": 8.5, "category": "行业动态", "title_cn": "中文标题", "summary": "深度简讯内容..."}}
+{{"score": 8.5, "category": "行业动态", "title_cn": "中文标题", "summary": "深度简讯内容...", "novelty": "new"}}
 """
 
     BATCH_PROMPT = """你是一位资深的科技媒体主编，正在为专业读者编写一份 AI 领域每日精选简报。
@@ -58,6 +69,17 @@ class AIFilter:
    - 结构：一句话讲清是什么 -> 核心功能/亮点 -> 行业意义/价值。
    - 语气：不要用"这款工具"、"该项目"开头，直接说主语。用事实说话。
    - 描述中提供了核心参数、技术架构、主要功能、融资数据等硬核信息时优先提炼。
+5. novelty: 对照「近期已推送」列表判断这条内容的新旧：
+   - "new"：列表中没有的新事件。
+   - "followup"：列表中某事件的实质新进展（正式上线、开源、公布新数据或价格、监管/诉讼结论、重大事故等），
+     简讯要直接写清这次的新进展是什么。
+   - "repeat"：列表中已推送事件的跟进报道、评论、转述、换角度解读或二次发布，没有实质新信息。
+   只按事件本身判断，不要因为公司或话题相同就判 repeat。列表为空时一律 "new"。
+
+近期已推送（日期 中文标题）：
+---
+{history}
+---
 
 事实约束：
 - 只能使用每条内容提供的标题、来源和描述（含原文摘录），不得编造参数、数据、融资金额、日期等未提供的事实。
@@ -71,18 +93,28 @@ class AIFilter:
 
 请回复纯 JSON 数组：
 [
-    {{"index": 0, "score": 9.5, "category": "产品发布", "title_cn": "中文标题", "summary": "简讯内容..."}},
+    {{"index": 0, "score": 9.5, "category": "产品发布", "title_cn": "中文标题", "summary": "简讯内容...", "novelty": "new"}},
     ...
 ]
 """
 
-    def __init__(self, provider: str = None):
+    NOVELTY = ("new", "followup", "repeat")
+
+    def __init__(self, provider: str = None, history: List[str] = None):
         """
         Args:
             provider: AI 提供商 (deepseek/openai/anthropic)
+            history: 近期已推送的标题（「MM-DD 中文标题」），用于判断重复与后续进展
         """
         self.provider = provider or config.AI_PROVIDER
         self.model_config = config.AI_MODELS.get(self.provider, {})
+        self.history_text = "\n".join(history or []) or "(无)"
+
+    @classmethod
+    def _novelty(cls, result) -> str:
+        """缺失或不合法时按新事件处理，不因此丢弃条目"""
+        value = result.get("novelty") if isinstance(result, dict) else None
+        return value if value in cls.NOVELTY else "new"
         
     def _get_api_key(self) -> str:
         """获取对应的 API Key"""
@@ -219,12 +251,14 @@ class AIFilter:
             source=item.source,
             signals=self._signals(item),
             description=self._context(item, 1000),
+            history=self.history_text,
         )
         
         try:
-            score, title_cn, summary, category = self._validate_result(
-                self._parse_json(self._call_llm(prompt))
-            )
+            result = self._parse_json(self._call_llm(prompt))
+            score, title_cn, summary, category = self._validate_result(result)
+            item.extra = item.extra or {}
+            item.extra["novelty"] = self._novelty(result)
             return score, title_cn or item.title, summary, category
         except Exception as e:
             print(f"[AIFilter] Error scoring item: {e}")
@@ -249,9 +283,9 @@ class AIFilter:
     描述: {self._context(item, 600)}
 """
             
-            prompt = self.BATCH_PROMPT.format(items_text=items_text)
+            prompt = self.BATCH_PROMPT.format(items_text=items_text, history=self.history_text)
             
-            valid = {}
+            valid, novelty = {}, {}
             try:
                 results = self._parse_json(self._call_llm(prompt))
                 if not isinstance(results, list):
@@ -269,6 +303,7 @@ class AIFilter:
                     seen.add(idx)
                     try:
                         valid[idx] = self._validate_result(result)
+                        novelty[idx] = self._novelty(result)
                     except ValueError as e:
                         print(f"[AIFilter] Invalid result for index {idx}: {e}")
 
@@ -284,6 +319,8 @@ class AIFilter:
                 if idx in valid:
                     score, title_cn, summary, category = valid[idx]
                     title_cn = title_cn or item.title
+                    item.extra = item.extra or {}
+                    item.extra["novelty"] = novelty.get(idx, "new")
                 else:
                     # 缺失或不合法的条目单独重试一次（有界回退）
                     score, title_cn, summary, category = self.score_single(item)
@@ -302,9 +339,19 @@ class AIFilter:
         """
         # 批量评分
         scored_items = self.score_batch(items)
-        
+
+        # 剔除已推送事件的重复报道；后续进展保留并标注
+        repeats = [item for item in scored_items if (item.extra or {}).get("novelty") == "repeat"]
+        if repeats:
+            print(f"   🔁 剔除 {len(repeats)} 条已推送事件的重复报道: "
+                  + "；".join((item.ai_title or item.title)[:30] for item in repeats[:5]))
+        for item in scored_items:
+            if (item.extra or {}).get("novelty") == "followup":
+                item.extra["followup"] = True
+
         # 过滤低分
-        filtered = [item for item in scored_items if item.ai_score >= min_score]
+        filtered = [item for item in scored_items
+                    if item.ai_score >= min_score and (item.extra or {}).get("novelty") != "repeat"]
         
         # 按 AI 分数排序
         filtered.sort(key=lambda x: x.ai_score, reverse=True)

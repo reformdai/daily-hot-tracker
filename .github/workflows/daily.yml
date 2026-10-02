@@ -28,6 +28,16 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      # 推送记忆：每次运行恢复最近一次保存的 state/，运行结束自动另存一份新缓存。
+      # 缓存 7 天未访问会被回收；丢失时只是退化为无记忆，不影响推送。
+      - name: Restore push history
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: push-history-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            push-history-
+
       - name: Run daily tracker
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}

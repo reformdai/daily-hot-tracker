@@ -36,6 +36,7 @@ from fetchers import (
 from ai_filter import AIFilter
 from feishu import FeishuBot
 from enrich import enrich_items
+from memory import PushHistory
 from pipeline import (
     annotate_engagement,
     deduplicate_items,
@@ -225,6 +226,7 @@ def write_run_log(health: List[Dict], candidates: List[ContentItem], selected: L
                 "rank_signals": extra.get("rank_signals"),
                 "body_via": extra.get("body_via"),
                 "ai_score": item.ai_score, "ai_category": item.ai_category,
+                "novelty": extra.get("novelty"),
                 "selected": item.id in selected_ids,
             }
 
@@ -239,12 +241,12 @@ def write_run_log(health: List[Dict], candidates: List[ContentItem], selected: L
         print(f"\n⚠️  运行日志写入失败: {exc}")
 
 
-def ai_score_and_rank(items: List[ContentItem]) -> List[ContentItem]:
-    """AI 评分和排序"""
+def ai_score_and_rank(items: List[ContentItem], history: List[str] = None) -> List[ContentItem]:
+    """AI 评分和排序；history 为近期已推送标题，用于识别重复与后续进展"""
     print("\n🤖 AI 评分中...")
     print(f"   使用模型: {config.AI_PROVIDER}")
     
-    ai_filter = AIFilter(provider=config.AI_PROVIDER)
+    ai_filter = AIFilter(provider=config.AI_PROVIDER, history=history)
     top_items = ai_filter.filter_top(
         items, 
         top_n=config.TOP_N_ITEMS,
@@ -298,12 +300,21 @@ def main():
     parser.add_argument("--limit", type=int, default=10, help="最终保留条数")
     parser.add_argument("--no-enrich", action="store_true", help="跳过原文补抓")
     parser.add_argument("--no-log", action="store_true", help="不写 logs/ 运行日志")
+    parser.add_argument("--no-memory", action="store_true", help="忽略推送记忆（不判重、不记录）")
     args = parser.parse_args()
     
     if args.limit:
         config.TOP_N_ITEMS = args.limit
     
     try:
+        # 0. 推送记忆：最近几天推过什么
+        history = None
+        if not args.no_memory:
+            history = PushHistory(config.HISTORY_PATH, ttl_days=config.HISTORY_TTL_DAYS).load()
+            if history.load_error:
+                print(f"⚠️  推送记忆读取失败 ({history.load_error})，本次按无记忆运行")
+            print(f"🧠 推送记忆: 近 {config.HISTORY_TTL_DAYS} 天已推送 {len(history.entries)} 条")
+
         # 1. 获取所有数据源
         health: List[Dict] = []
         all_items = fetch_all_sources(health)
@@ -326,6 +337,15 @@ def main():
         if not fresh_items:
             print("   ⚠️  时效过滤后无内容，回退使用全部条目")
             fresh_items = deduped_items
+
+        # 跨天判重（规则层）：URL 相同或原标题高度相似的已推送内容直接剔除
+        if history and history.entries:
+            fresh_items, seen_items = history.split_seen(fresh_items, threshold=config.HISTORY_TITLE_SIMILARITY)
+            if seen_items:
+                print(f"   🔁 剔除 {len(seen_items)} 条近 {config.HISTORY_TTL_DAYS} 天已推送过的内容")
+            if not fresh_items:
+                print("   ✅ 今天没有未推送过的新内容")
+                return 0
 
         enhanced_items = apply_quality_score(fresh_items, tiers=config.SOURCE_TIERS)
 
@@ -350,7 +370,7 @@ def main():
                 print("\n⏭️  跳过原文补抓")
             else:
                 enrich_candidates(filtered_items)
-            top_items = ai_score_and_rank(filtered_items)
+            top_items = ai_score_and_rank(filtered_items, history.headlines() if history else None)
 
         if not args.no_log:
             write_run_log(health, filtered_items, top_items)
@@ -384,8 +404,16 @@ def main():
         if not args.no_push and not args.dry_run:
             if not push_to_feishu(top_items):
                 return 1
+            # 9. 记住本次推送，明天据此判重
+            if history is not None:
+                history.record(top_items)
+                try:
+                    history.save()
+                    print(f"\n🧠 已记录本次推送 {len(top_items)} 条到 {config.HISTORY_PATH}")
+                except OSError as exc:
+                    print(f"\n⚠️  推送记忆保存失败: {exc}")
         else:
-            print("\n⏭️  跳过飞书推送")
+            print("\n⏭️  跳过飞书推送（不记录推送记忆）")
         
         print("\n✅ 完成!")
         return 0

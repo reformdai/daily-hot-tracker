@@ -144,6 +144,8 @@ class FeishuBot:
             for item in cat_items:
                 idx += 1
                 title_text = item.ai_title if item.ai_title else item.title
+                if (item.extra or {}).get("followup"):
+                    title_text = f"🔄 后续 · {title_text}"
                 summary_text = item.ai_summary if item.ai_summary else item.description[:100]
                 source_text = self._format_source(item)
                 content_md = (
@@ -170,6 +172,8 @@ class FeishuBot:
             for item in cat_items:
                 idx += 1
                 title_text = item.ai_title if item.ai_title else item.title
+                if (item.extra or {}).get("followup"):
+                    title_text = f"🔄 后续 · {title_text}"
                 summary_text = item.ai_summary if item.ai_summary else item.description[:100]
                 source_text = self._format_source(item)
                 content_md = (

@@ -33,6 +33,12 @@ A daily AI news digest generator. It collects AI-related trending items from Hac
   - **Candidate diversity**: of the 40 candidates sent to the model, one source family (e.g. Reddit, ArXiv) can take at most 10
   - **Full-text enrichment**: candidates with thin descriptions get an excerpt of the original page (README for GitHub / HF models), with optional Jina Reader fallback
 
+- **🧠 Push memory (cross-day dedup)**
+  - Remembers what was pushed in the last 7 days (`state/push_history.json`, kept between GitHub Actions runs with `actions/cache`)
+  - Rule layer: items with the same URL (including tracking-param and HN-discussion variants) or a near-identical original title are dropped before AI scoring
+  - Semantic layer: the scoring prompt includes recent pushed headlines; the model labels each item as a new event, a **substantive follow-up** to a pushed story (kept and tagged "🔄 后续" on the card), or a **repeat** re-telling (dropped)
+  - Recorded only after a successful Feishu push; `--dry-run` / `--no-push` do not record, `--no-memory` ignores memory entirely
+
 - **🧠 AI processing**
   - **Keyword prefilter**: English keywords match on word boundaries (previously "AI" matched "said" and "paid"); Chinese keywords supported; AI-native sources (ArXiv, HF, AIHOT) are exempt
   - **Scoring**: 1–10; keeps the top 10 items scoring 6 or higher (at most 2 GitHub Trending items per day, each scoring 8 or higher)
@@ -139,6 +145,7 @@ Environment variables (`.env`, or GitHub Secrets / Variables):
 | `MAX_ITEM_AGE_HOURS` | Optional freshness window in hours, default 72; `0` disables |
 | `AI_CANDIDATE_LIMIT` / `MAX_CANDIDATES_PER_FAMILY` | Optional candidate count sent to the model (default 40) and per-source-family cap (default 10) |
 | `LOG_DIR` | Optional run log directory, default `logs` |
+| `HISTORY_PATH` / `HISTORY_TTL_DAYS` | Optional push memory file (default `state/push_history.json`) and retention days (default 7) |
 
 In `config.py`:
 
@@ -177,7 +184,7 @@ Product Hunt logs API HTTP status and GraphQL error messages (a configured token
 - RSS feeds, HN search and Hugging Face endpoints added on 2026-10-02 could not be fetched live from the development sandbox and are covered by offline parsing tests only; check the first run's log or `logs/run-*.json` and set broken feeds to `enabled: False`.
 - Full-text enrichment reads static HTML only (no JavaScript); when a page cannot be read the source description is used. It makes one request per candidate to the original site.
 - Results from a local network do not guarantee the same behavior on GitHub Actions runners.
-- There is no persistent storage, so a story may be picked on two consecutive days (the freshness window and recency decay make this less likely).
+- Push memory relies on the GitHub Actions cache: a cache unused for 7 days is evicted, and after eviction or manual deletion one run proceeds without memory. Whether a same-event item is a repeat or a follow-up is a model judgement and can be wrong; each candidate's `novelty` is recorded in `logs/run-*.json`.
 
 ## 🧪 Tests
 

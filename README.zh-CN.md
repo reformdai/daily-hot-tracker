@@ -29,6 +29,12 @@
   - **候选多样性**: 送 AI 的 40 条候选中，单一来源族（如 Reddit、ArXiv）最多 10 条
   - **原文补抓**: 对描述不足的候选抓取原文正文（GitHub / HF 模型读 README），可选 Jina Reader 兜底
 
+- **🧠 推送记忆（跨天去重）**
+  - 记住最近 7 天推送过的条目（GitHub Actions 中用 `actions/cache` 在运行之间保存 `state/push_history.json`）
+  - 规则层：URL 相同（含追踪参数、HN 讨论链接等变体）或原标题高度相似的内容在 AI 评分前直接剔除
+  - 语义层：AI 评分时附上近期已推送的标题，判断每条是新事件、已推事件的**实质后续进展**（保留，卡片标注「🔄 后续」），还是换源转述的**重复报道**（剔除）
+  - 只在飞书推送成功后记录；`--dry-run` / `--no-push` 不记录，`--no-memory` 完全忽略记忆
+
 - **🧠 AI 智能处理**
   - **关键词预筛选**: 英文关键词按词边界匹配（此前 "AI" 会误命中 "said"、"paid"），支持中文关键词；ArXiv、HF、AIHOT 等 AI 垂直源免筛
   - **智能评分**: 1-10 分，保留 6 分以上的 Top 10（GitHub Trending 每天最多 2 条且需 8 分以上）
@@ -142,6 +148,7 @@
 | `MAX_ITEM_AGE_HOURS` | 可选，时效窗口小时数，默认 72；`0` 关闭 |
 | `AI_CANDIDATE_LIMIT` / `MAX_CANDIDATES_PER_FAMILY` | 可选，送 AI 的候选数（默认 40）与单一来源族上限（默认 10） |
 | `LOG_DIR` | 可选，运行日志目录，默认 `logs` |
+| `HISTORY_PATH` / `HISTORY_TTL_DAYS` | 可选，推送记忆文件（默认 `state/push_history.json`）与保留天数（默认 7） |
 
 `config.py` 中可调整：
 
@@ -180,7 +187,7 @@ Product Hunt 会输出 API 的 HTTP 状态码和 GraphQL 错误信息（服务�
 - 2026-10-02 新增的 RSS 源、HN 搜索与 Hugging Face 接口在开发环境中网络受限，未能实测，只做了离线解析测试；首次运行请查看日志或 `logs/run-*.json` 里的信源状态，失效的源改为 `enabled: False`。
 - 原文补抓只读静态 HTML，不执行 JavaScript；读不到时退回来源描述，不影响流程。补抓会对候选原文站点各发一次请求。
 - 本机网络下的抓取结果不代表 GitHub Actions 运行环境同样可用。
-- 没有持久化存储，同一条热点可能连续两天入选（时效窗口与半衰排序会降低这种概率）。
+- 推送记忆依赖 GitHub Actions 缓存：缓存 7 天未使用会被回收，手动删除或回收后会退化为无记忆运行一次。同一事件的「重复还是后续」由模型判断，可能误判，`logs/run-*.json` 中的 `novelty` 字段记录了每条的判断结果。
 
 ## 🧪 测试
 

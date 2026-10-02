@@ -128,6 +128,14 @@ MAX_ITEM_AGE_HOURS_BY_SOURCE = {
 AI_CANDIDATE_LIMIT = int(os.getenv("AI_CANDIDATE_LIMIT", "40"))
 MAX_CANDIDATES_PER_FAMILY = int(os.getenv("MAX_CANDIDATES_PER_FAMILY", "10"))
 
+# ==================== 推送记忆（跨天去重） ====================
+# 记录最近 N 天推送过的条目：URL 相同/标题高度相似的直接剔除，
+# 同一事件的换源报道交给 AI 判断（重复剔除，实质后续进展保留并标注「后续」）。
+# GitHub Actions 中由 workflow 的 actions/cache 在运行之间保存该文件。
+HISTORY_PATH = os.getenv("HISTORY_PATH", "state/push_history.json")
+HISTORY_TTL_DAYS = int(os.getenv("HISTORY_TTL_DAYS", "7"))
+HISTORY_TITLE_SIMILARITY = float(os.getenv("HISTORY_TITLE_SIMILARITY", "0.8"))
+
 # ==================== 信源分级 ====================
 # 参考 AIHOT：T1 官方一手（实验室/公司官方博客）、T2 媒体与精选聚合、T3 社区与榜单。
 # RSS/网页/JSON 源在各自配置里写 "tier"；内置抓取器按来源名在这里查，未列出的默认 T3。
