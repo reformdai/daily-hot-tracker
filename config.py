@@ -38,7 +38,7 @@ AI_MODELS = {
         "base_url": "https://api.openai.com/v1",
     },
     "anthropic": {
-        "model": "claude-3-haiku-20240307",
+        "model": "claude-haiku-5-5",
         "base_url": "https://api.anthropic.com",
     },
 }
