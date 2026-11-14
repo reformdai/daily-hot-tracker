@@ -221,13 +221,15 @@ class AIHotCategoryTest(OfflineTestCase):
         fetcher = AIHotFetcher()
         with mock.patch.object(fetcher.session, "get") as get:
             get.return_value.json.return_value = {"items": [
-                {"id": "1", "title": "M", "url": "https://example.com/1", "category": "ai-models"},
-                {"id": "2", "title": "P", "url": "https://example.com/2", "category": "ai-products"},
-                {"id": "3", "title": "N", "url": "https://example.com/3", "category": "brand-new"},
+                {"id": "1", "title": "M", "links": {"original": "https://example.com/1"}, "category": "ai-models", "source": {"name": "Example source"}},
+                {"id": "2", "title": "P", "links": {"original": "https://example.com/2"}, "category": "ai-products"},
+                {"id": "3", "title": "N", "links": {"original": "https://example.com/3"}, "category": "brand-new"},
             ]}
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 items = fetcher.fetch()
+        self.assertEqual(items[0].url, "https://example.com/1")
+        self.assertEqual(items[0].author, "Example source")
         self.assertEqual([i.category for i in items], ["模型发布", "产品发布", "行业动态"])
         self.assertEqual([i.extra["aihot_category"] for i in items], ["ai-models", "ai-products", "brand-new"])
         self.assertIn("unknown categories mapped to 行业动态: ['brand-new']", out.getvalue())
