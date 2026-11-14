@@ -63,9 +63,9 @@ def _collect_ids(ph_order=("alpha", "beta")):
     aihot_fetcher = AIHotFetcher()
     with mock.patch.object(aihot_fetcher.session, "get") as get:
         get.return_value.json.return_value = {"items": [
-            {"id": "native-1", "title": "Native", "url": "https://example.com/n"},
-            {"title": "No id 1", "url": "https://example.com/x"},
-            {"title": "No id 2", "url": "https://example.com/y"},
+            {"id": "native-1", "title": "Native", "links": {"original": "https://example.com/n"}},
+            {"title": "No id 1", "links": {"original": "https://example.com/x"}},
+            {"title": "No id 2", "links": {"original": "https://example.com/y"}},
         ]}
         aihot = aihot_fetcher.fetch()
 

@@ -1,5 +1,5 @@
 """
-AIHOT (aihot.virxact.com) 数据源
+AIHOT (aihot.news) 数据源
 从 AIHOT 平台获取 AI 领域精选热点。
 公开 API，无需 API key，匿名免费使用。
 """
@@ -12,8 +12,8 @@ from .base import BaseFetcher, ContentItem, stable_id
 class AIHotFetcher(BaseFetcher):
 
     name = "AIHOT"
-    BASE_URL = "https://aihot.virxact.com/api/public"
-    USER_AGENT = "Mozilla/5.0 (compatible; daily-hot-tracker/1.0)"
+    BASE_URL = "https://aihot.news/api/v1"
+    USER_AGENT = "daily-hot-tracker/1.0 (+https://github.com/reformdai/daily-hot-tracker)"
 
     CATEGORY_MAP = {
         "model": "模型发布",
@@ -36,7 +36,7 @@ class AIHotFetcher(BaseFetcher):
         return self._fetch_items(mode="selected", limit=limit)
 
     def fetch_daily_report(self) -> List[ContentItem]:
-        return self._request("/daily", {}, limit=50)
+        return self._request("/dailies/latest", {}, limit=50)
 
     def fetch_all(self, limit: int = 50) -> List[ContentItem]:
         return self._fetch_items(mode="all", limit=limit)
@@ -57,12 +57,21 @@ class AIHotFetcher(BaseFetcher):
             resp.raise_for_status()
             data = resp.json()
 
-            raw_items = data.get("items", []) if isinstance(data, dict) else data
+            if endpoint == "/dailies/latest":
+                report = data["report"]
+                raw_items = [
+                    item for section in report["sections"] for item in section["items"]
+                ] + report["flashes"]
+            else:
+                raw_items = data["items"]
             items = []
             unknown_categories = set()
             for raw in raw_items[:limit]:
                 published_at = None
-                pub_str = raw.get("publishedAt") or raw.get("published_at")
+                pub_str = raw.get("publishedAt")
+                links = raw["links"]
+                url = links.get("original") or links.get("aihot") or ""
+                source_name = (raw.get("source") or {}).get("name", "")
                 if pub_str:
                     try:
                         dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
@@ -79,19 +88,19 @@ class AIHotFetcher(BaseFetcher):
                 items.append(ContentItem(
                     id=(
                         f"aihot_{raw['id']}" if raw.get("id")
-                        else stable_id("aihot", raw.get("url") or raw.get("title", ""))
+                        else stable_id("aihot", url or raw.get("title", ""))
                     ),
                     title=raw.get("title", ""),
-                    url=raw.get("url", ""),
+                    url=url,
                     source="AIHOT",
                     category=category,
                     description=raw.get("summary", ""),
-                    author=raw.get("source", ""),
+                    author=source_name,
                     published_at=published_at,
                     extra={
                         "aihot_category": cat_key,
                         "title_en": raw.get("title_en", ""),
-                        "original_source": raw.get("source", ""),
+                        "original_source": source_name,
                     },
                 ))
 
